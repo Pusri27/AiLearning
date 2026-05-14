@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  body {
+    background-color: #fdfaf1;
+    @apply font-sans text-body-md;
+  }
+}
+
+@layer components {
+  .neo-shadow {
+    @apply shadow-[4px_4px_0px_0px_rgba(0,0,0,1)];
+  }
+  .neo-shadow-sm {
+    @apply shadow-[2px_2px_0px_0px_rgba(0,0,0,1)];
+  }
+  .neo-shadow-lg {
+    @apply shadow-[8px_8px_0px_0px_rgba(0,0,0,1)];
+  }
+  .neo-btn {
+    @apply border-2 border-on-surface transition-all active:translate-x-0 active:translate-y-0 active:shadow-none;
+  }
+}
