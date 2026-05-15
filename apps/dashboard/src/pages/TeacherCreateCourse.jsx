@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TeacherSidebar from '../components/TeacherSidebar';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { showToast, friendlyError } from '../lib/toast';
 
 const TeacherCreateCourse = () => {
   const navigate = useNavigate();
@@ -51,7 +53,7 @@ const TeacherCreateCourse = () => {
   const handlePublish = async (e) => {
     if (e) e.preventDefault();
     if (!formData.title || !formData.category || !formData.price) {
-      alert('Mohon isi Judul, Kategori, dan Harga.');
+      showToast('Mohon isi Judul, Kategori, dan Harga terlebih dahulu.', 'error');
       return;
     }
 
@@ -74,11 +76,19 @@ const TeacherCreateCourse = () => {
         ]);
 
       if (error) throw error;
-      
-      alert('Selamat! Kursus Anda telah berhasil diterbitkan.');
+
+      // Kirim Notifikasi Global
+      await supabase.from('notifications').insert({
+        title: 'Kursus Baru: ' + formData.title,
+        content: `Mulai belajar sekarang di kategori ${formData.category}!`,
+        type: 'course',
+        link_to: '/catalog'
+      });
+
+      showToast('Kursus berhasil diterbitkan! 🎉');
       navigate('/teacher/courses');
     } catch (error) {
-      alert('Gagal menerbitkan kursus: ' + error.message);
+      showToast(friendlyError(error), 'error');
     } finally {
       setLoading(false);
     }
@@ -122,7 +132,7 @@ const TeacherCreateCourse = () => {
             <section className="bg-white rounded-[40px] p-8 md:p-10 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
               <div className="flex items-center gap-4 mb-10">
                 <div className="w-12 h-12 bg-primary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
-                  <span className="material-symbols-outlined text-on-primary-container font-black">info</span>
+                  <Icon name="info" className="w-6 h-6 text-on-primary-container" />
                 </div>
                 <h2 className="text-2xl font-black text-on-surface">Detail Kursus</h2>
               </div>

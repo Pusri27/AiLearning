@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 
 const TeacherAnalytics = () => {
@@ -78,9 +79,9 @@ const TeacherAnalytics = () => {
             <p className="text-lg text-on-surface-variant">Track your course performance and student engagement.</p>
           </div>
           <div className="flex items-center gap-2 bg-surface-container-lowest px-4 py-2 rounded-lg border border-outline-variant shadow-sm">
-            <span className="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+            <Icon name="calendar_month" className="w-5 h-5 text-on-surface-variant" />
             <span className="font-bold text-sm text-on-surface-variant">Last 30 Days</span>
-            <span className="material-symbols-outlined text-on-surface-variant">arrow_drop_down</span>
+            <Icon name="arrow_drop_down" className="w-5 h-5 text-on-surface-variant" />
           </div>
         </div>
 
@@ -89,12 +90,12 @@ const TeacherAnalytics = () => {
           {/* Revenue Card */}
           <div className="bg-primary-container text-on-primary-container p-6 rounded-[32px] shadow-sm relative overflow-hidden group border-2 border-on-surface">
             <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:scale-110 transition-transform duration-500">
-              <span className="material-symbols-outlined text-7xl">payments</span>
+              <Icon name="payments" className="w-16 h-16" />
             </div>
             <h3 className="font-bold text-sm opacity-80 mb-2">Total Revenue</h3>
             <div className="text-4xl font-black mb-4">Rp {stats.revenue.toLocaleString()}</div>
             <div className="flex items-center gap-1 text-xs bg-white/30 w-max px-3 py-1 rounded-full font-bold">
-              <span className="material-symbols-outlined text-sm">trending_up</span>
+              <Icon name="trending_up" className="w-4 h-4" />
               <span>+14.5% vs last month</span>
             </div>
           </div>

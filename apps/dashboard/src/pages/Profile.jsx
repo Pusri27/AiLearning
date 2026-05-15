@@ -1,184 +1,304 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
+import NotificationDropdown from '../components/NotificationDropdown';
+import Icon from '../components/Icon';
+import { supabase } from '../lib/supabaseClient';
+import { useUserProfile } from '../context/UserProfileContext';
+import { checkAchievements } from '../lib/achievementService';
 
 const Profile = () => {
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+
+  const [stats, setStats] = useState({
+    enrolledCount:    0,
+    completedCount:   0,
+    postsCount:       0,
+  });
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [recentPosts, setRecentPosts]         = useState([]);
+  const [achievements, setAchievements]       = useState([]);
+  const [loading, setLoading]                 = useState(true);
+
+  const initials = profile.fullName
+    ? profile.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate('/login'); return; }
+
+      // Cek lencana baru
+      await checkAchievements(session.user.id);
+
+      const uid = session.user.id;
+
+      // Parallel fetches
+      const [enrollRes, postsRes, achRes] = await Promise.all([
+        supabase
+          .from('enrollments')
+          .select('id, progress, course_id, courses(title, image_url, category)')
+          .eq('user_id', uid)
+          .order('enrolled_at', { ascending: false }),
+        supabase
+          .from('posts')
+          .select('id, title, category, created_at')
+          .eq('author_id', uid)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('user_achievements')
+          .select('achievement_id, achievements(*)')
+          .eq('user_id', uid)
+      ]);
+
+      const enrollments = enrollRes.data || [];
+      const posts       = postsRes.data  || [];
+      let userAchs      = achRes.data?.map(a => a.achievements) || [];
+
+      // Logic: Auto-award Pioneer badge if empty
+      if (userAchs.length === 0) {
+        const { data: pioneerAch } = await supabase.from('achievements').select('*').eq('id', 'pioneer').single();
+        if (pioneerAch) {
+          await supabase.from('user_achievements').insert({ user_id: uid, achievement_id: 'pioneer' });
+          userAchs = [pioneerAch];
+        }
+      }
+
+      setEnrolledCourses(enrollments);
+      setRecentPosts(posts);
+      setAchievements(userAchs);
+      setStats({
+        enrolledCount:  enrollments.length,
+        completedCount: enrollments.filter(e => e.progress >= 100).length,
+        postsCount:     posts.length,
+      });
+      setLoading(false);
+    };
+    fetchData();
+  }, [navigate]);
+
+  const formatDate = (d) =>
+    new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <div className="flex h-screen overflow-hidden bg-background font-body-md text-on-background">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto">
+        {/* Header */}
         <header className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
+          <h1 className="font-headline-md text-headline-md font-extrabold text-on-surface hidden md:block">Profil Saya</h1>
           <div className="md:hidden">
-            <span className="font-headline-md text-headline-md font-extrabold text-on-surface">Lumina</span>
+            <span className="font-headline-md text-headline-md font-extrabold text-on-surface">Harin</span>
           </div>
-          <div className="hidden md:block">
-            <div className="relative">
-              <input className="pl-10 pr-4 py-2 border-2 border-on-surface rounded-lg bg-surface-bright focus:ring-0 focus:border-primary transition-all" placeholder="Search courses..." type="text"/>
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <button className="material-symbols-outlined text-primary text-2xl transition-transform duration-100 active:scale-95">notifications</button>
-            <div 
-              onClick={() => navigate('/profile')}
-              className="flex items-center gap-3 p-1 border-2 border-primary rounded-full bg-primary-container shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-primary text-2xl font-bold" style={{ fontVariationSettings: "'FILL' 1" }}>account_circle</span>
-            </div>
+          <div className="flex items-center gap-4">
+            <NotificationDropdown />
+            <ProfileDropdown />
           </div>
         </header>
 
-        <main className="p-margin-mobile md:p-margin-desktop space-y-gutter max-w-container-max mx-auto w-full">
+        <main className="p-margin-mobile md:p-margin-desktop space-y-gutter max-w-container-max mx-auto w-full pb-16">
+
+          {/* ── Hero Card ─────────────────────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
             <div className="lg:col-span-8 bg-surface-container-lowest border-2 border-on-surface p-gutter shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row gap-8 items-center md:items-start">
-              <div className="relative">
-                <img alt="User" className="w-32 h-32 md:w-48 md:h-48 object-cover border-[6px] border-on-surface shadow-[4px_4px_0px_0px_rgba(103,77,174,1)]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMy8b4vUUoGY1Hx7F_jG8ASnDhwdbPkskPEuyqv4Tjn2ngQqWsC1gbJQoic8F9iuz-dF8Wx24-vfTSW8PS2y_bGMm0X-G-tnY_Ja9lPWfcJOXWBrkbctmOCQn8prcyLUpRoXu02WwaSwviuFtqTNlTBmCBDxKBe-NJvJniWA2kbA54iGP0IaxjsQ5QWP4QppoUoeKUh_2IlqTAsSvdCInOzQXKaQA53cJ4D4Y3JQ-GBGkZ0Gr-4zyXmqKh6-GtrGFfpy6z3iKdMMk"/>
-                <div className="absolute -bottom-2 -right-2 bg-primary-container border-2 border-on-surface p-2 rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer">
-                  <span className="material-symbols-outlined text-on-primary-container" style={{ fontVariationSettings: "'FILL' 1" }}>edit</span>
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                <div className="w-32 h-32 md:w-40 md:h-40 border-[6px] border-on-surface shadow-[4px_4px_0px_0px_rgba(103,77,174,1)] bg-primary-container flex items-center justify-center overflow-hidden">
+                  {profile.avatarUrl ? (
+                    <img 
+                      alt="User" 
+                      className="w-full h-full object-cover" 
+                      src={profile.avatarUrl} 
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <span className={`${profile.avatarUrl ? 'hidden' : 'flex'} text-5xl font-black text-on-primary-container`}>
+                    {initials}
+                  </span>
+                </div>
+                <div
+                  onClick={() => navigate('/settings')}
+                  className="absolute -bottom-2 -right-2 bg-primary-container border-2 border-on-surface p-2 rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:scale-110 transition-transform"
+                  title="Ubah foto di Settings"
+                >
+                  <Icon name="edit" className="w-5 h-5 text-on-primary-container" />
                 </div>
               </div>
-              <div className="text-center md:text-left space-y-4">
+
+              {/* Info */}
+              <div className="text-center md:text-left space-y-3 flex-1 min-w-0">
                 <div>
-                  <h1 className="font-headline-xl text-headline-xl text-on-surface">Aditya Wijaya</h1>
-                  <p className="font-body-lg text-body-lg text-on-surface-variant">Full-stack Developer & Lifelong Learner</p>
+                  <h2 className="font-headline-xl text-headline-xl text-on-surface break-words">
+                    {profile.fullName || 'Nama Belum Diisi'}
+                  </h2>
+                  {profile.username && (
+                    <p className="text-sm font-bold text-on-surface-variant">@{profile.username}</p>
+                  )}
+                  <p className="font-body-md text-body-md text-on-surface-variant mt-1">{profile.email}</p>
                 </div>
-                <p className="font-body-md text-body-md max-w-lg">
-                  Bersemangat mempelajari arsitektur cloud dan UI/UX yang humanis. Sedang mengejar sertifikasi Advanced Node.js di Lumina Learning. Suka kopi dan eksplorasi Open Source.
+                <div className="inline-flex items-center gap-2 px-3 py-1 border-2 border-on-surface bg-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs font-black uppercase">
+                  <Icon name={profile.role === 'teacher' ? 'school' : 'auto_stories'} className="w-4 h-4" />
+                  {profile.role === 'teacher' ? 'Pengajar' : 'Pelajar Aktif'}
+                </div>
+                <p className="text-sm text-on-surface-variant">
+                  Akun terdaftar di Harin Learning.{' '}
+                  <button onClick={() => navigate('/settings')} className="underline font-bold hover:text-primary transition-colors">
+                    Lengkapi profil →
+                  </button>
                 </p>
-                <div className="flex flex-wrap justify-center md:justify-start gap-2">
-                  <span className="bg-secondary-fixed text-on-secondary-fixed-variant px-4 py-1 border-2 border-on-surface font-label-bold text-label-bold">UI/UX Design</span>
-                  <span className="bg-secondary-fixed text-on-secondary-fixed-variant px-4 py-1 border-2 border-on-surface font-label-bold text-label-bold">Backend Systems</span>
-                  <span className="bg-secondary-fixed text-on-secondary-fixed-variant px-4 py-1 border-2 border-on-surface font-label-bold text-label-bold">Cloud Arch</span>
-                </div>
               </div>
             </div>
+
+            {/* Stat cards */}
             <div className="lg:col-span-4 grid grid-cols-1 gap-gutter">
               <div className="bg-primary-container border-2 border-on-surface p-gutter shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-center items-center text-center">
-                <span className="material-symbols-outlined text-4xl mb-2">military_tech</span>
-                <p className="font-headline-lg text-headline-lg">24</p>
-                <p className="font-label-bold text-label-bold uppercase">Sertifikat Selesai</p>
+                <Icon name="auto_stories" className="w-10 h-10 mb-2" />
+                {loading ? <div className="w-12 h-8 bg-on-surface/10 animate-pulse rounded" /> : (
+                  <p className="font-headline-lg text-headline-lg">{stats.enrolledCount}</p>
+                )}
+                <p className="font-label-bold text-label-bold uppercase">Kursus Diambil</p>
               </div>
               <div className="bg-secondary-container border-2 border-on-surface p-gutter shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-center items-center text-center">
-                <span className="material-symbols-outlined text-4xl mb-2">bolt</span>
-                <p className="font-headline-lg text-headline-lg">15,420</p>
-                <p className="font-label-bold text-label-bold uppercase">Lumina Points</p>
+                <Icon name="article" className="w-10 h-10 mb-2" />
+                {loading ? <div className="w-12 h-8 bg-on-surface/10 animate-pulse rounded" /> : (
+                  <p className="font-headline-lg text-headline-lg">{stats.postsCount}</p>
+                )}
+                <p className="font-label-bold text-label-bold uppercase">Post Ditulis</p>
               </div>
             </div>
           </div>
 
+          {/* ── Stat chips ────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-            <div className="bg-surface-container-lowest border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4">
-              <div className="bg-tertiary-container border-2 border-on-surface p-3 rounded-lg">
-                <span className="material-symbols-outlined text-on-tertiary-container">local_fire_department</span>
+            {[
+              { icon: 'workspace_premium', color: 'bg-tertiary-container', label: 'Kursus Selesai', value: stats.completedCount },
+              { icon: 'auto_stories',      color: 'bg-primary-fixed',      label: 'Kursus Aktif',   value: stats.enrolledCount - stats.completedCount },
+              { icon: 'edit_note',         color: 'bg-secondary-fixed',    label: 'Blog Ditulis',   value: stats.postsCount },
+            ].map((item, i) => (
+              <div key={i} className="bg-surface-container-lowest border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4">
+                <div className={`${item.color} border-2 border-on-surface p-3 rounded-lg`}>
+                  <Icon name={item.icon} className="w-6 h-6 text-on-surface" />
+                </div>
+                <div>
+                  <p className="font-label-bold text-label-bold text-on-surface-variant uppercase">{item.label}</p>
+                  {loading
+                    ? <div className="w-10 h-6 bg-on-surface/10 animate-pulse rounded mt-1" />
+                    : <p className="font-headline-md text-headline-md">{item.value}</p>
+                  }
+                </div>
               </div>
-              <div>
-                <p className="font-label-bold text-label-bold text-on-surface-variant uppercase">Streak Hari Ini</p>
-                <p className="font-headline-md text-headline-md">15 Hari</p>
+            ))}
+          </div>
+
+          {/* ── My Courses + Recent Posts ─────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter pb-10">
+
+            {/* Enrolled Courses */}
+            <div className="bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
+              <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
+                <h2 className="font-headline-md text-headline-md">Kursus Saya</h2>
+                <button onClick={() => navigate('/courses')} className="text-xs font-black text-primary hover:underline">
+                  Lihat Semua →
+                </button>
               </div>
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-16 bg-on-surface/5 animate-pulse rounded" />)}
+                </div>
+              ) : enrolledCourses.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-10 text-center gap-3">
+                  <Icon name="school" className="w-12 h-12 text-on-surface-variant opacity-30" />
+                  <p className="font-bold text-on-surface-variant">Kamu belum mengambil kursus.</p>
+                  <button onClick={() => navigate('/catalog')} className="px-4 py-2 bg-primary text-on-primary border-2 border-on-surface font-label-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                    Jelajahi Katalog
+                  </button>
+                </div>
+              ) : (
+                <div className="flex-1 divide-y-2 divide-on-surface/20">
+                  {enrolledCourses.slice(0, 5).map((e, idx) => (
+                    <div key={idx} className="p-4 flex items-center gap-4 hover:bg-surface-container transition-colors">
+                      <div className="w-12 h-12 shrink-0 border-2 border-on-surface bg-primary-container overflow-hidden">
+                        {e.courses?.image_url
+                          ? <img src={e.courses.image_url} alt={e.courses.title} className="w-full h-full object-cover" />
+                          : <div className="w-full h-full bg-primary-container flex items-center justify-center"><Icon name="school" className="w-6 h-6 text-on-primary-container" /></div>
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-label-bold text-sm line-clamp-1">{e.courses?.title}</p>
+                        <p className="text-xs text-on-surface-variant">{e.courses?.category}</p>
+                        {/* Progress bar */}
+                        <div className="mt-1.5 h-1.5 bg-surface-container border border-on-surface/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${e.progress || 0}%` }} />
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-xs font-black text-on-surface-variant">{e.progress || 0}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="bg-surface-container-lowest border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4">
-              <div className="bg-primary-fixed border-2 border-on-surface p-3 rounded-lg">
-                <span className="material-symbols-outlined text-on-primary-fixed-variant">auto_stories</span>
+
+            {/* Recent Blog Posts */}
+            <div className="bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
+              <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
+                <h2 className="font-headline-md text-headline-md">Blog yang Saya Buat</h2>
+                <button onClick={() => navigate('/write')} className="text-xs font-black text-primary hover:underline">
+                  Tulis Post →
+                </button>
               </div>
-              <div>
-                <p className="font-label-bold text-label-bold text-on-surface-variant uppercase">Kursus Aktif</p>
-                <p className="font-headline-md text-headline-md">4 Kursus</p>
-              </div>
-            </div>
-            <div className="bg-surface-container-lowest border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4">
-              <div className="bg-secondary-fixed border-2 border-on-surface p-3 rounded-lg">
-                <span className="material-symbols-outlined text-on-secondary-fixed-variant">schedule</span>
-              </div>
-              <div>
-                <p className="font-label-bold text-label-bold text-on-surface-variant uppercase">Waktu Belajar</p>
-                <p className="font-headline-md text-headline-md">128 Jam</p>
-              </div>
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-14 bg-on-surface/5 animate-pulse rounded" />)}
+                </div>
+              ) : recentPosts.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-10 text-center gap-3">
+                  <Icon name="edit_note" className="w-12 h-12 text-on-surface-variant opacity-30" />
+                  <p className="font-bold text-on-surface-variant">Kamu belum menulis post.</p>
+                  <button onClick={() => navigate('/write')} className="px-4 py-2 bg-secondary text-on-secondary border-2 border-on-surface font-label-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                    Tulis Sekarang
+                  </button>
+                </div>
+              ) : (
+                <div className="flex-1 divide-y-2 divide-on-surface/20">
+                  {recentPosts.map((post, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => navigate(`/blog/${post.id}`)}
+                      className="w-full p-4 flex items-start gap-4 hover:bg-surface-container transition-colors text-left"
+                    >
+                      <div className="mt-1 w-8 h-8 shrink-0 bg-primary-container border-2 border-on-surface flex items-center justify-center">
+                        <Icon name="article" className="w-4 h-4 text-on-primary-container" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-label-bold text-sm line-clamp-2">{post.title}</p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">
+                          {post.category && <span className="font-bold mr-2">{post.category}</span>}
+                          {formatDate(post.created_at)}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-gutter pb-10">
-            <div className="lg:col-span-1 bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
-              <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
-                <h2 className="font-headline-md text-headline-md">Pencapaian</h2>
-                <span className="material-symbols-outlined text-on-surface-variant">workspace_premium</span>
-              </div>
-              <div className="p-6 grid grid-cols-2 gap-4 flex-1">
-                <div className="flex flex-col items-center text-center p-3 border-2 border-on-surface bg-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all">
-                  <div className="w-16 h-16 mb-2 bg-primary-container border-2 border-on-surface rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl">history_edu</span>
-                  </div>
-                  <p className="font-label-bold text-label-bold">Pioneer</p>
-                </div>
-                <div className="flex flex-col items-center text-center p-3 border-2 border-on-surface bg-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all">
-                  <div className="w-16 h-16 mb-2 bg-secondary-container border-2 border-on-surface rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl">rocket_launch</span>
-                  </div>
-                  <p className="font-label-bold text-label-bold">Fast Learner</p>
-                </div>
-                <div className="flex flex-col items-center text-center p-3 border-2 border-on-surface bg-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all">
-                  <div className="w-16 h-16 mb-2 bg-tertiary-container border-2 border-on-surface rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl">forum</span>
-                  </div>
-                  <p className="font-label-bold text-label-bold">Helpful Soul</p>
-                </div>
-                <div className="flex flex-col items-center text-center p-3 border-2 border-on-surface bg-surface-variant shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] opacity-50 grayscale">
-                  <div className="w-16 h-16 mb-2 bg-outline-variant border-2 border-on-surface rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl">lock</span>
-                  </div>
-                  <p className="font-label-bold text-label-bold">Elite Coder</p>
-                </div>
-              </div>
-              <button className="m-6 py-2 border-2 border-on-surface font-label-bold text-label-bold hover:bg-surface-container transition-all">
-                Lihat Semua (12)
-              </button>
-            </div>
-            <div className="lg:col-span-2 bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
-              <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
-                <h2 className="font-headline-md text-headline-md">Riwayat Aktivitas</h2>
-                <span className="material-symbols-outlined text-on-surface-variant">timeline</span>
-              </div>
-              <div className="flex-1 divide-y-2 divide-on-surface">
-                {[
-                  { icon: 'check_circle', color: 'bg-primary-container', title: 'Menyelesaikan Kursus', desc: 'Advanced React Patterns: State Management & Hooks', time: '2 Jam yang lalu' },
-                  { icon: 'emoji_events', color: 'bg-secondary-container', title: 'Meraih Badge Baru', desc: 'Fast Learner: Selesaikan 5 pelajaran dalam 1 jam.', time: 'Kemarin' },
-                  { icon: 'comment', color: 'bg-tertiary-container', title: 'Memberikan Komentar', desc: '"Penjelasan yang sangat bagus tentang goroutines!" di forum Go Fundamentals.', time: '2 Hari yang lalu' },
-                  { icon: 'star', color: 'bg-primary-fixed', title: 'Update Profil', desc: 'Mengubah foto profil dan bio pengguna.', time: 'Minggu lalu' }
-                ].map((item, idx) => (
-                  <div key={idx} className="p-6 flex items-start gap-4 hover:bg-secondary-fixed transition-colors">
-                    <div className={`mt-1 flex-shrink-0 w-10 h-10 border-2 border-on-surface ${item.color} flex items-center justify-center`}>
-                      <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>{item.icon}</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between">
-                        <p className="font-label-bold text-label-bold text-on-surface">{item.title}</p>
-                        <p className="text-xs font-label-bold text-on-surface-variant">{item.time}</p>
-                      </div>
-                      <p className="font-body-md text-body-md text-on-surface-variant">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
         </main>
       </div>
 
+      {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-        <NavLink to="/" className="flex flex-col items-center justify-center text-on-surface-variant">
-          <span className="material-symbols-outlined">dashboard</span>
-        </NavLink>
-        <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant">
-          <span className="material-symbols-outlined">menu_book</span>
-        </NavLink>
-        <a className="flex flex-col items-center justify-center text-on-surface-variant" href="#">
-          <span className="material-symbols-outlined">hub</span>
-        </a>
-        <NavLink to="/settings" className="flex flex-col items-center justify-center text-on-surface-variant">
-          <span className="material-symbols-outlined">settings</span>
-        </NavLink>
+        <NavLink to="/"        className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard"       className="w-6 h-6" /></NavLink>
+        <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book"       className="w-6 h-6" /></NavLink>
+        <NavLink to="/profile" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="account_circle" className="w-6 h-6" /></NavLink>
+        <NavLink to="/settings"className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="settings"        className="w-6 h-6" /></NavLink>
       </nav>
     </div>
   );

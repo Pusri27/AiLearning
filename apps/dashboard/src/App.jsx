@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { supabase } from './lib/supabaseClient';
 import Dashboard from './pages/Dashboard';
 import Pricing from './pages/Pricing';
 import BlogFeed from './pages/BlogFeed';
+import BlogPost from './pages/BlogPost';
 import WritePost from './pages/WritePost';
 import MyCourses from './pages/MyCourses';
 import CourseDetail from './pages/CourseDetail';
@@ -16,7 +18,6 @@ import StudySpace from './pages/StudySpace';
 import DailyChallenge from './pages/DailyChallenge';
 import Achievements from './pages/Achievements';
 import Checkout from './pages/Checkout';
-import Wishlist from './pages/Wishlist';
 import Cart from './pages/Cart';
 import TeacherDashboard from './pages/TeacherDashboard';
 import TeacherCourses from './pages/TeacherCourses';
@@ -25,38 +26,85 @@ import TeacherAnalytics from './pages/TeacherAnalytics';
 import TeacherActivity from './pages/TeacherActivity';
 import TeacherCreateCourse from './pages/TeacherCreateCourse';
 import AIAssistant from './components/AIAssistant';
+import { MusicPlayerProvider } from './context/MusicPlayerContext';
+import PersistentMusicPlayer from './components/PersistentMusicPlayer';
+import { UserProfileProvider } from './context/UserProfileContext';
 
 function App() {
+  const [session, setSession] = useState(null);
+  const [role, setRole] = useState('student');
+  const [fullName, setFullName] = useState('User');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else {
+        setRole('student');
+        setFullName('User');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (userId) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', userId)
+      .single();
+    
+    if (data) {
+      setRole(data.role || 'student');
+      setFullName(data.full_name || 'User');
+    }
+  };
+
+  // Don't show AI on auth pages
+  const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
+
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/blog" element={<BlogFeed />} />
-        <Route path="/write" element={<WritePost />} />
-        <Route path="/courses" element={<MyCourses />} />
-        <Route path="/courses/:id" element={<CourseDetail />} />
-        <Route path="/catalog" element={<Catalog />} />
-        <Route path="/checkout" element={<Checkout />} />
-        <Route path="/wishlist" element={<Wishlist />} />
-        <Route path="/cart" element={<Cart />} />
-        <Route path="/help" element={<Help />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<SignUp />} />
-        <Route path="/study" element={<StudySpace />} />
-        <Route path="/challenge" element={<DailyChallenge />} />
-        <Route path="/achievements" element={<Achievements />} />
-        <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
-        <Route path="/teacher/courses" element={<TeacherCourses />} />
-        <Route path="/teacher/students" element={<TeacherStudents />} />
-        <Route path="/teacher/analytics" element={<TeacherAnalytics />} />
-        <Route path="/teacher/activity" element={<TeacherActivity />} />
-        <Route path="/teacher/courses/create" element={<TeacherCreateCourse />} />
-      </Routes>
-      <AIAssistant />
-    </Router>
+    <UserProfileProvider>
+      <MusicPlayerProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/blog" element={<BlogFeed />} />
+          <Route path="/write" element={<WritePost />} />
+          <Route path="/edit-post/:id" element={<WritePost />} />
+          <Route path="/blog/:id" element={<BlogPost />} />
+          <Route path="/courses" element={<MyCourses />} />
+          <Route path="/courses/:id" element={<CourseDetail />} />
+          <Route path="/catalog" element={<Catalog />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/help" element={<Help />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/study" element={<StudySpace />} />
+          <Route path="/challenge" element={<DailyChallenge />} />
+          <Route path="/achievements" element={<Achievements />} />
+          <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
+          <Route path="/teacher/courses" element={<TeacherCourses />} />
+          <Route path="/teacher/students" element={<TeacherStudents />} />
+          <Route path="/teacher/analytics" element={<TeacherAnalytics />} />
+          <Route path="/teacher/activity" element={<TeacherActivity />} />
+          <Route path="/teacher/courses/create" element={<TeacherCreateCourse />} />
+        </Routes>
+        {session && !isAuthPage && <AIAssistant userRole={role} userName={fullName} />}
+        <PersistentMusicPlayer />
+      </Router>
+      </MusicPlayerProvider>
+    </UserProfileProvider>
   );
 }
 

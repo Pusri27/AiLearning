@@ -1,6 +1,7 @@
-import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import Icon from './Icon';
+import { showToast } from '../lib/toast';
 
 const TeacherSidebar = ({ user }) => {
   const navigate = useNavigate();
@@ -9,7 +10,7 @@ const TeacherSidebar = ({ user }) => {
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      alert('Error logging out: ' + error.message);
+      showToast('Gagal logout. Silakan coba lagi.', 'error');
     } else {
       navigate('/login');
     }
@@ -32,8 +33,8 @@ const TeacherSidebar = ({ user }) => {
       <nav className="hidden lg:flex flex-col h-full p-6 border-r-4 border-on-surface bg-surface-container-lowest fixed left-0 top-0 w-[280px] z-[60] pointer-events-auto">
         <div className="mb-12 cursor-pointer group" onClick={() => navigate('/')}>
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-4xl font-black group-hover:rotate-12 transition-transform">auto_awesome</span>
-            <h1 className="text-3xl font-black text-primary">Lumina</h1>
+            <Icon name="auto_awesome" className="w-10 h-10 text-primary group-hover:rotate-12 transition-transform" />
+            <h1 className="text-3xl font-black text-primary">Harin</h1>
           </div>
           <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-black mt-1 ml-1">Instructor Suite</p>
         </div>
@@ -42,7 +43,7 @@ const TeacherSidebar = ({ user }) => {
           onClick={() => navigate('/teacher/courses/create')}
           className="mb-8 w-full bg-[#FF6B4A] hover:bg-[#ff5533] text-white font-black py-4 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none border-2 border-on-surface z-[70] cursor-pointer"
         >
-          <span className="material-symbols-outlined font-black">add_circle</span>
+          <Icon name="add_circle" className="w-6 h-6" />
           NEW COURSE
         </button>
 
@@ -61,9 +62,7 @@ const TeacherSidebar = ({ user }) => {
                   : 'text-on-surface-variant border-transparent hover:bg-surface-variant hover:border-on-surface'
               }`}
             >
-              <span className={`material-symbols-outlined text-2xl ${isActive(item.path) ? 'icon-fill' : ''}`} style={{ fontVariationSettings: isActive(item.path) ? "'FILL' 1" : "" }}>
-                {item.icon}
-              </span>
+              <Icon name={item.icon} className={`w-6 h-6 ${isActive(item.path) ? 'fill-current' : ''}`} />
               <span className="font-black text-lg">{item.name}</span>
             </button>
           ))}
@@ -71,11 +70,11 @@ const TeacherSidebar = ({ user }) => {
 
         <div className="mt-auto space-y-2 pt-6 border-t border-outline-variant">
           <button className="w-full flex items-center gap-4 text-on-surface-variant p-4 hover:bg-surface-variant rounded-xl transition-all">
-            <span className="material-symbols-outlined">help</span>
+            <Icon name="help" className="w-6 h-6" />
             <span className="font-bold">Help</span>
           </button>
           <button onClick={handleLogout} className="w-full flex items-center gap-4 text-on-surface-variant p-4 hover:bg-surface-variant rounded-xl transition-all border-2 border-transparent hover:border-on-surface">
-            <span className="material-symbols-outlined font-black">logout</span>
+            <Icon name="logout" className="w-6 h-6" />
             <span className="font-black">Logout</span>
           </button>
         </div>
@@ -93,9 +92,7 @@ const TeacherSidebar = ({ user }) => {
                 : 'text-on-surface-variant'
             }`}
           >
-            <span className={`material-symbols-outlined ${isActive(item.path) ? 'icon-fill' : ''}`} style={{ fontVariationSettings: isActive(item.path) ? "'FILL' 1" : "" }}>
-              {item.icon}
-            </span>
+            <Icon name={item.icon} className={`w-6 h-6 ${isActive(item.path) ? 'fill-current' : ''}`} />
             <span className="text-[10px] font-bold">{item.name.replace('My ', '')}</span>
           </button>
         ))}

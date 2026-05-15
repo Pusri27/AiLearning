@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
+import NotificationDropdown from '../components/NotificationDropdown';
 import { supabase } from '../lib/supabaseClient';
+import Icon from '../components/Icon';
+import { showToast, friendlyError } from '../lib/toast';
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -48,8 +51,9 @@ const Cart = () => {
 
     if (!error) {
       setCartItems(cartItems.filter(item => item.cartId !== cartId));
+      showToast('Item berhasil dihapus dari keranjang.');
     } else {
-      alert('Gagal menghapus item: ' + error.message);
+      showToast(friendlyError(error), 'error');
     }
   };
 
@@ -80,7 +84,7 @@ const Cart = () => {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <button className="material-symbols-outlined p-2 border-2 border-on-surface bg-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all rounded-lg">notifications</button>
+            <NotificationDropdown />
             <ProfileDropdown />
           </div>
         </header>
@@ -107,7 +111,7 @@ const Cart = () => {
                           onClick={() => removeItem(item.cartId)}
                           className="text-on-surface-variant hover:text-error transition-colors p-1"
                         >
-                          <span className="material-symbols-outlined">delete</span>
+                          <Icon name="delete" className="w-6 h-6" />
                         </button>
                       </div>
                       <div className="flex justify-between items-center mt-4">
@@ -148,7 +152,7 @@ const Cart = () => {
           ) : (
             <div className="flex flex-col items-center justify-center py-20 space-y-8">
               <div className="w-48 h-48 bg-surface-container-high rounded-full flex items-center justify-center border-4 border-dashed border-on-surface animate-pulse">
-                <span className="material-symbols-outlined text-8xl opacity-20">shopping_basket</span>
+                <Icon name="shopping_cart" className="w-20 h-20 opacity-20" />
               </div>
               <div className="text-center">
                 <h2 className="font-headline-lg text-3xl">Wah, Keranjangmu Kosong!</h2>

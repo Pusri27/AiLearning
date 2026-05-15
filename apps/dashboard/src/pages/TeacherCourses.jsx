@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { showToast, friendlyError } from '../lib/toast';
 
 const TeacherCourses = () => {
   const navigate = useNavigate();
@@ -10,6 +12,7 @@ const TeacherCourses = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,17 +52,18 @@ const TeacherCourses = () => {
   }, [navigate]);
 
   const handleDeleteCourse = async (id) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus kursus ini?')) {
-      const { error } = await supabase
-        .from('courses')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        alert('Gagal menghapus: ' + error.message);
-      } else {
-        setCourses(courses.filter(c => c.id !== id));
-      }
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      showToast('Klik hapus sekali lagi untuk konfirmasi.', 'error');
+      setTimeout(() => setConfirmDeleteId(null), 4000);
+      return;
+    }
+    const { error } = await supabase.from('courses').delete().eq('id', id);
+    setConfirmDeleteId(null);
+    if (error) showToast(friendlyError(error), 'error');
+    else {
+      setCourses(courses.filter(c => c.id !== id));
+      showToast('Kursus berhasil dihapus.');
     }
   };
 
@@ -81,7 +85,7 @@ const TeacherCourses = () => {
           </div>
           <div className="flex gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
+              <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline w-5 h-5" />
               <input 
                 className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-outline-variant bg-surface-container-lowest focus:border-primary transition-all outline-none" 
                 placeholder="Search courses..." 
@@ -91,7 +95,7 @@ const TeacherCourses = () => {
               />
             </div>
             <button className="bg-surface-container-lowest border-2 border-outline-variant p-3 rounded-2xl hover:bg-surface-container-low transition-colors">
-              <span className="material-symbols-outlined">filter_list</span>
+              <Icon name="filter_list" className="w-5 h-5" />
             </button>
           </div>
         </div>

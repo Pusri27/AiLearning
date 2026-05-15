@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 
 const TeacherActivity = () => {
@@ -90,7 +91,7 @@ const TeacherActivity = () => {
           {
             id: 'mock-3',
             type: 'AI Tutor Note',
-            user: 'Lumina AI',
+            user: 'Harin AI',
             target: 'Cohort A Progress',
             time: '4:20 PM',
             date: 'Yesterday',
@@ -160,7 +161,7 @@ const TeacherActivity = () => {
                   <div className="flex-shrink-0">
                     {activity.type === 'AI Tutor Note' ? (
                       <div className="w-14 h-14 rounded-2xl bg-secondary text-on-secondary flex items-center justify-center border-2 border-on-surface shadow-[4px_4px_0px_0px_#1c1b1b]">
-                        <span className="material-symbols-outlined text-3xl font-black">smart_toy</span>
+                        <Icon name="smart_toy" className="w-8 h-8" />
                       </div>
                     ) : (
                       <div className={`w-14 h-14 rounded-full flex items-center justify-center border-2 border-on-surface shadow-[4px_4px_0px_0px_#1c1b1b] ${
@@ -168,10 +169,10 @@ const TeacherActivity = () => {
                         activity.type === 'Submission' ? 'bg-secondary-container text-on-secondary-container' :
                         'bg-tertiary-container text-on-tertiary-container'
                       }`}>
-                        <span className="material-symbols-outlined text-3xl font-black">
-                          {activity.type === 'Enrollment' ? 'person_add' : 
-                           activity.type === 'Submission' ? 'task' : 'chat'}
-                        </span>
+                        <Icon name={
+                          activity.type === 'Enrollment' ? 'person_add' : 
+                          activity.type === 'Submission' ? 'task' : 'chat'
+                        } className="w-8 h-8" />
                       </div>
                     )}
                   </div>
@@ -184,7 +185,7 @@ const TeacherActivity = () => {
                         {activity.type}
                       </span>
                       <span className="text-xs font-black text-on-surface-variant flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm font-black">schedule</span> {activity.time}
+                        <Icon name="schedule" className="w-4 h-4" /> {activity.time}
                       </span>
                     </div>
 

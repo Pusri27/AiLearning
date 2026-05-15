@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 
 const TeacherStudents = () => {
@@ -104,7 +105,7 @@ const TeacherStudents = () => {
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
           <div className="relative flex-1 max-w-md">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+                <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline w-5 h-5" />
             <input 
               className="w-full bg-surface-container-lowest border-2 border-outline-variant rounded-2xl py-3 pl-12 pr-4 font-bold text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary transition-all shadow-sm" 
               placeholder="Search by name or email..." 
@@ -114,7 +115,7 @@ const TeacherStudents = () => {
             />
           </div>
           <button className="flex items-center justify-center gap-2 px-6 py-3 bg-transparent border-2 border-outline-variant text-on-surface font-bold rounded-2xl hover:bg-surface-variant transition-all shadow-sm">
-            <span className="material-symbols-outlined">filter_list</span>
+                <Icon name="filter_list" className="w-5 h-5" />
             Filter by Course
           </button>
         </div>

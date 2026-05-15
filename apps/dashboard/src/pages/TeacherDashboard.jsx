@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
+import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 
 const TeacherDashboard = () => {
@@ -15,7 +16,7 @@ const TeacherDashboard = () => {
     const fetchData = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session) {
         navigate('/login');
         return;
@@ -88,7 +89,7 @@ const TeacherDashboard = () => {
           <div className="bg-primary-container p-8 rounded-[32px] border-4 border-on-surface shadow-[8px_8px_0px_0px_#1c1b1b]">
             <div className="flex justify-between items-start mb-6">
               <div className="w-14 h-14 bg-white rounded-full border-2 border-on-surface flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary text-3xl">group</span>
+                <Icon name="group" className="w-8 h-8 text-primary" />
               </div>
               <span className="text-xs font-black px-4 py-1 bg-white border-2 border-on-surface rounded-full uppercase">Live</span>
             </div>
@@ -110,7 +111,7 @@ const TeacherDashboard = () => {
           <div className="bg-tertiary-container p-8 rounded-[32px] border-4 border-on-surface shadow-[8px_8px_0px_0px_#1c1b1b]">
             <div className="flex justify-between items-start mb-6">
               <div className="w-14 h-14 bg-white rounded-full border-2 border-on-surface flex items-center justify-center">
-                <span className="material-symbols-outlined text-tertiary text-3xl">payments</span>
+                <Icon name="payments" className="w-8 h-8 text-tertiary" />
               </div>
               <span className="text-xs font-black px-4 py-1 bg-white border-2 border-on-surface rounded-full uppercase">Earnings</span>
             </div>
@@ -124,7 +125,7 @@ const TeacherDashboard = () => {
           <section className="lg:col-span-2">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-3xl font-black text-on-surface">Kursus Saya</h2>
-              <button 
+              <button
                 onClick={() => navigate('/teacher/courses/create')}
                 className="hidden md:flex items-center gap-2 px-8 py-3 bg-[#FF6B4A] text-white font-black rounded-full border-2 border-on-surface shadow-[4px_4px_0px_0px_#1c1b1b] hover:translate-y-1 hover:shadow-none transition-all"
               >
@@ -183,7 +184,7 @@ const TeacherDashboard = () => {
                   </div>
                 ))}
                 {students.length === 0 && (
-                   <p className="text-sm text-on-surface-variant italic text-center py-8 font-bold">Belum ada aktivitas.</p>
+                  <p className="text-sm text-on-surface-variant italic text-center py-8 font-bold">Belum ada aktivitas.</p>
                 )}
               </div>
               <button onClick={() => navigate('/teacher/activity')} className="w-full mt-10 py-4 border-4 border-on-surface rounded-2xl font-black hover:bg-surface-variant transition-all text-on-surface shadow-[4px_4px_0px_0px_#1c1b1b] active:translate-y-1 active:shadow-none">Lihat Semua Log</button>

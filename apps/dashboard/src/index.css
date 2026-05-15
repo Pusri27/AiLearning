@@ -27,4 +27,16 @@
   .neo-btn {
     @apply border-2 border-on-surface transition-all active:translate-x-0 active:translate-y-0 active:shadow-none;
   }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes equalizerBounce {
+  from { transform: scaleY(0.4); }
+  to   { transform: scaleY(1); }
 }

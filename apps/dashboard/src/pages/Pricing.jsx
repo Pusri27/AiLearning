@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
+import Icon from '../components/Icon';
 
 const Pricing = () => {
   const navigate = useNavigate();
@@ -36,15 +37,15 @@ const Pricing = () => {
                 <p className="text-sm mb-8 text-on-surface-variant">Sangat cocok untuk kamu yang baru ingin mencoba belajar dengan asisten AI.</p>
                 <ul className="space-y-4 mb-10 flex-1">
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary">check_circle</span>
+                    <Icon name="check_circle" className="w-5 h-5 text-primary" />
                     <span className="text-sm">Akses Dasar Kursus</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary">check_circle</span>
+                    <Icon name="check_circle" className="w-5 h-5 text-primary" />
                     <span className="text-sm">AI Tutor Standar (Limited)</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary">check_circle</span>
+                    <Icon name="check_circle" className="w-5 h-5 text-primary" />
                     <span className="text-sm">Dukungan Komunitas</span>
                   </li>
                 </ul>
@@ -67,19 +68,19 @@ const Pricing = () => {
                 <p className="text-sm mb-8 text-on-surface-variant">Optimalkan belajarmu dengan fitur AI tanpa batas dan sertifikasi resmi.</p>
                 <ul className="space-y-4 mb-10 flex-1">
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
+                    <Icon name="star" className="w-5 h-5 text-secondary fill-current" />
                     <span className="text-sm font-bold">Unlimited AI Tutor 24/7</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-secondary">check_circle</span>
+                    <Icon name="check_circle" className="w-5 h-5 text-secondary" />
                     <span className="text-sm">Mode Offline Tersedia</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-secondary">check_circle</span>
+                    <Icon name="check_circle" className="w-5 h-5 text-secondary" />
                     <span className="text-sm">Sertifikat Resmi Terverifikasi</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-secondary">check_circle</span>
+                    <Icon name="check_circle" className="w-5 h-5 text-secondary" />
                     <span className="text-sm">Personalized Study Path AI</span>
                   </li>
                 </ul>
@@ -98,19 +99,19 @@ const Pricing = () => {
                 <p className="text-sm mb-8 text-on-surface-variant">Solusi terbaik untuk sekolah, universitas, atau tim korporasi.</p>
                 <ul className="space-y-4 mb-10 flex-1">
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-tertiary">groups</span>
+                    <Icon name="groups" className="w-5 h-5 text-tertiary" />
                     <span className="text-sm">Manajemen Tim & Dashboard</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-tertiary">analytics</span>
+                    <Icon name="analytics" className="w-5 h-5 text-tertiary" />
                     <span className="text-sm">Analitik Belajar Kustom</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-tertiary">support_agent</span>
+                    <Icon name="support_agent" className="w-5 h-5 text-tertiary" />
                     <span className="text-sm">Dukungan Prioritas 1-on-1</span>
                   </li>
                   <li className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-tertiary">integration_instructions</span>
+                    <Icon name="integration_instructions" className="w-5 h-5 text-tertiary" />
                     <span className="text-sm">Integrasi LMS (Canvas/Moodle)</span>
                   </li>
                 </ul>
@@ -144,13 +145,13 @@ const Pricing = () => {
                     <tr key={idx} className="border-b-2 border-on-surface/10">
                       <td className="p-6 font-medium">{row.name}</td>
                       <td className="p-6 text-center">
-                        {row.icon ? (row.free ? <span className="material-symbols-outlined text-primary">check</span> : <span className="material-symbols-outlined text-on-surface-variant">close</span>) : <span className="text-sm">{row.free}</span>}
+                        {row.icon ? (row.free ? <Icon name="check" className="w-5 h-5 text-primary mx-auto" /> : <Icon name="close" className="w-5 h-5 text-on-surface-variant mx-auto" />) : <span className="text-sm">{row.free}</span>}
                       </td>
                       <td className="p-6 text-center bg-secondary-fixed/10">
-                        {row.icon ? (row.pro ? <span className="material-symbols-outlined text-secondary">check</span> : <span className="material-symbols-outlined text-on-surface-variant">close</span>) : <span className="text-sm font-bold">{row.pro}</span>}
+                        {row.icon ? (row.pro ? <Icon name="check" className="w-5 h-5 text-secondary mx-auto" /> : <Icon name="close" className="w-5 h-5 text-on-surface-variant mx-auto" />) : <span className="text-sm font-bold">{row.pro}</span>}
                       </td>
                       <td className="p-6 text-center">
-                        {row.icon ? (row.institution ? <span className="material-symbols-outlined text-tertiary">check</span> : <span className="material-symbols-outlined text-on-surface-variant">close</span>) : <span className="text-sm font-bold">{row.institution}</span>}
+                        {row.icon ? (row.institution ? <Icon name="check" className="w-5 h-5 text-tertiary mx-auto" /> : <Icon name="close" className="w-5 h-5 text-on-surface-variant mx-auto" />) : <span className="text-sm font-bold">{row.institution}</span>}
                       </td>
                     </tr>
                   ))}
@@ -180,7 +181,7 @@ const Pricing = () => {
           <section className="bg-primary-container border-y-2 border-on-surface py-16 overflow-hidden relative">
             <div className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop text-center relative z-10">
               <h2 className="text-headline-lg mb-6">Siap untuk Mengakselerasi Belajarmu?</h2>
-              <p className="text-xl mb-10 font-medium">Bergabunglah dengan ribuan pelajar yang sudah merasakan manfaat AI Tutor Lumina.</p>
+              <p className="text-xl mb-10 font-medium">Bergabunglah dengan ribuan pelajar yang sudah merasakan manfaat AI Tutor Harin.</p>
               <nav className="hidden md:flex items-center justify-center gap-8">
             <NavLink to="/catalog" className="font-label-bold text-on-surface hover:text-primary transition-colors">Kursus</NavLink>
             <NavLink to="/courses" className="font-label-bold text-on-surface hover:text-primary transition-colors">Sertifikasi</NavLink>
@@ -208,13 +209,13 @@ const Pricing = () => {
                     <path d="M36.7273 44C33.9891 44 31.6043 39.8386 30.3636 33.69C29.123 39.8386 26.7382 44 24 44C21.2618 44 18.877 39.8386 17.6364 33.69C16.3957 39.8386 14.0109 44 11.2727 44C7.25611 44 4 35.0457 4 24C4 12.9543 7.25611 4 11.2727 4C14.0109 4 16.3957 8.16144 17.6364 14.31C18.877 8.16144 21.2618 4 24 4C26.7382 4 29.123 8.16144 30.3636 14.31C31.6043 8.16144 33.9891 4 36.7273 4C40.7439 4 44 12.9543 44 24C44 35.0457 40.7439 44 36.7273 44Z"></path>
                   </svg>
                 </div>
-                <span className="text-xl font-bold tracking-tight">Lumina Learning</span>
+                <span className="text-xl font-bold tracking-tight">Harin Learning</span>
               </div>
               <p className="text-sm text-on-surface-variant mb-6">Platform edukasi berbasis AI yang membantu setiap individu belajar lebih cerdas, bukan lebih keras.</p>
               <div className="flex gap-4">
-                <a className="brutal-border brutal-shadow-sm bg-surface-container p-2 rounded-lg hover:bg-primary-container transition-all" href="#"><span className="material-symbols-outlined block">share</span></a>
-                <a className="brutal-border brutal-shadow-sm bg-surface-container p-2 rounded-lg hover:bg-primary-container transition-all" href="#"><span className="material-symbols-outlined block">language</span></a>
-                <a className="brutal-border brutal-shadow-sm bg-surface-container p-2 rounded-lg hover:bg-primary-container transition-all" href="#"><span className="material-symbols-outlined block">mail</span></a>
+                <a className="brutal-border brutal-shadow-sm bg-surface-container p-2 rounded-lg hover:bg-primary-container transition-all" href="#"><Icon name="share" className="w-5 h-5" /></a>
+                <a className="brutal-border brutal-shadow-sm bg-surface-container p-2 rounded-lg hover:bg-primary-container transition-all" href="#"><Icon name="language" className="w-5 h-5" /></a>
+                <a className="brutal-border brutal-shadow-sm bg-surface-container p-2 rounded-lg hover:bg-primary-container transition-all" href="#"><Icon name="mail" className="w-5 h-5" /></a>
               </div>
             </div>
             <div>
@@ -246,7 +247,7 @@ const Pricing = () => {
             </div>
           </div>
           <div className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop pt-8 border-t border-on-surface/10 text-center">
-            <p className="text-xs font-bold text-on-surface-variant">© 2024 Lumina Learning. Dibuat dengan semangat untuk Pendidikan Indonesia.</p>
+            <p className="text-xs font-bold text-on-surface-variant">© 2024 Harin Learning. Dibuat dengan semangat untuk Pendidikan Indonesia.</p>
           </div>
         </footer>
       </div>
