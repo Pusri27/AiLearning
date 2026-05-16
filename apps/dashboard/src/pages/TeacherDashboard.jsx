@@ -4,6 +4,7 @@ import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { WaveIcon } from '../components/Icons';
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -80,7 +81,7 @@ const TeacherDashboard = () => {
       <main className="flex-1 lg:ml-[280px] pt-20 lg:pt-10 pb-24 lg:pb-8 px-margin-mobile lg:px-margin-desktop w-full max-w-[1440px] mx-auto min-h-screen">
         {/* Welcome Section */}
         <section className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-black text-on-surface mb-2">Selamat Datang, {user?.full_name?.split(' ')[0] || 'Coach'}! 👋</h1>
+          <h1 className="text-4xl md:text-5xl font-black text-on-surface mb-2 flex items-center gap-3">Selamat Datang, {user?.full_name?.split(' ')[0] || 'Coach'}! <WaveIcon className="w-10 h-10 md:w-12 md:h-12" /></h1>
           <p className="text-lg text-on-surface-variant font-bold">Berikut adalah ringkasan aktivitas kelas Anda hari ini.</p>
         </section>
 

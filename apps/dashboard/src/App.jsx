@@ -25,53 +25,34 @@ import TeacherStudents from './pages/TeacherStudents';
 import TeacherAnalytics from './pages/TeacherAnalytics';
 import TeacherActivity from './pages/TeacherActivity';
 import TeacherCreateCourse from './pages/TeacherCreateCourse';
+import Community from './pages/Community';
 import AIAssistant from './components/AIAssistant';
 import { MusicPlayerProvider } from './context/MusicPlayerContext';
 import PersistentMusicPlayer from './components/PersistentMusicPlayer';
-import { UserProfileProvider } from './context/UserProfileContext';
+import { useUserProfile } from './context/UserProfileContext';
 
 function App() {
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [session, setSession] = useState(null);
-  const [role, setRole] = useState('student');
-  const [fullName, setFullName] = useState('User');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) fetchProfile(session.user.id);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else {
-        setRole('student');
-        setFullName('User');
-      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('role, full_name')
-      .eq('id', userId)
-      .single();
-    
-    if (data) {
-      setRole(data.role || 'student');
-      setFullName(data.full_name || 'User');
-    }
-  };
-
   // Don't show AI on auth pages
   const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/signup';
 
   return (
-    <UserProfileProvider>
-      <MusicPlayerProvider>
+    <MusicPlayerProvider>
       <Router>
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -99,12 +80,12 @@ function App() {
           <Route path="/teacher/analytics" element={<TeacherAnalytics />} />
           <Route path="/teacher/activity" element={<TeacherActivity />} />
           <Route path="/teacher/courses/create" element={<TeacherCreateCourse />} />
+          <Route path="/community" element={<Community />} />
         </Routes>
-        {session && !isAuthPage && <AIAssistant userRole={role} userName={fullName} />}
+        {(session || isGuest) && !isAuthPage && <AIAssistant userRole={profile.role} userName={profile.fullName} />}
         <PersistentMusicPlayer />
       </Router>
-      </MusicPlayerProvider>
-    </UserProfileProvider>
+    </MusicPlayerProvider>
   );
 }
 

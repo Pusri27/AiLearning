@@ -2,6 +2,30 @@ import React from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
 import { useMusicPlayer } from '../context/MusicPlayerContext';
+import { useUserProfile } from '../context/UserProfileContext';
+import { 
+  MusicIcon, 
+  CrossIcon, 
+  BrainIcon, 
+  PianoIcon, 
+  RainIcon, 
+  CoffeeIcon, 
+  FogIcon,
+  PlayIcon,
+  PauseIcon
+} from './Icons';
+
+const getMoodIcon = (iconName, className) => {
+  switch (iconName) {
+    case 'music': return <MusicIcon className={className} />;
+    case 'brain': return <BrainIcon className={className} />;
+    case 'piano': return <PianoIcon className={className} />;
+    case 'rain': return <RainIcon className={className} />;
+    case 'coffee': return <CoffeeIcon className={className} />;
+    case 'fog': return <FogIcon className={className} />;
+    default: return null;
+  }
+};
 
 // Safe hook — sidebar might render before context in rare cases
 const useMusicPlayerSafe = () => {
@@ -13,31 +37,34 @@ const Sidebar = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
   const music     = useMusicPlayerSafe();
+  const { profile, logout } = useUserProfile();
+  const isGuest   = profile.isGuest;
 
   const navItems = [
     { to: '/',            iconName: 'dashboard',         label: 'Dashboard'    },
     { to: '/catalog',     iconName: 'search',            label: 'Catalog'      },
     { to: '/study',       iconName: 'music_note',        label: 'Study Space'  },
-    { to: '/achievements',iconName: 'workspace_premium', label: 'Achievements' },
-    { to: '/courses',     iconName: 'school',            label: 'My Courses'   },
+    { to: '/achievements',iconName: 'workspace_premium', label: 'Achievements', hidden: isGuest },
+    { to: '/community',    iconName: 'groups',            label: 'Community'    },
+    { to: '/courses',     iconName: 'school',            label: 'My Courses',   hidden: isGuest },
     { to: '/cart',        iconName: 'shopping_cart',     label: 'Cart'         },
     { to: '/blog',        iconName: 'article',           label: 'Blog Feed'    },
   ];
 
   const onStudyPage = location.pathname === '/study';
-  const showPlayer  = music && music.isPlaying && !onStudyPage;
+  const showPlayer  = music && music.isMiniPlayerVisible && !onStudyPage;
 
   return (
     <aside className="w-64 bg-surface border-r-4 border-on-surface p-6 flex flex-col h-screen overflow-y-auto hidden md:flex shrink-0 z-50 shadow-[4px_0px_0px_0px_rgba(0,0,0,1)] sticky top-0">
       {/* Brand Logo */}
       <div className="mb-10 px-2 cursor-pointer" onClick={() => navigate('/')}>
         <h1 className="font-headline-md text-headline-md font-black text-primary mb-1 tracking-tighter">Harin Learning</h1>
-        <p className="font-label-bold text-label-bold text-secondary">Student Portal</p>
+        <p className="font-label-bold text-label-bold text-secondary">{isGuest ? 'Guest Mode' : 'Student Portal'}</p>
       </div>
 
       {/* Main Navigation */}
       <nav className="flex-1 space-y-2">
-        {navItems.map((item) => (
+        {navItems.filter(i => !i.hidden).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -84,7 +111,7 @@ const Sidebar = () => {
                     className="w-9 h-9 rounded-full border-2 border-white flex items-center justify-center text-white text-sm font-black group-hover:scale-110 transition-transform"
                     style={{ backgroundColor: music.activeMood.accent + 'cc' }}
                   >
-                    {music.isPlaying ? '⏸' : '▶'}
+                    {music.isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
                   </div>
                 </button>
                 {/* Equalizer top-right */}
@@ -111,14 +138,19 @@ const Sidebar = () => {
                 style={{ backgroundColor: music.activeMood.accent + '28' }}
               >
                 <div className="min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface opacity-50">Now Playing</p>
-                  <p className="text-xs font-black text-on-surface truncate">{music.activeMood.emoji} {music.activeMood.title}</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-on-surface opacity-50">{music.isPlaying ? 'Now Playing' : 'Paused'}</p>
+                  <p className="text-xs font-black text-on-surface truncate flex items-center gap-1">
+                    {getMoodIcon(music.activeMood.iconName, "w-3 h-3")} {music.activeMood.title}
+                  </p>
                 </div>
                 <button
-                  onClick={() => music.setIsPlaying(false)}
-                  className="shrink-0 w-6 h-6 rounded border-2 border-on-surface/30 flex items-center justify-center text-on-surface-variant hover:text-error hover:border-error transition-colors text-[10px] font-black"
+                  onClick={() => {
+                    music.setIsPlaying(false);
+                    music.setIsMiniPlayerVisible(false);
+                  }}
+                  className="shrink-0 w-6 h-6 rounded border-2 border-on-surface/30 flex items-center justify-center text-on-surface-variant hover:text-error hover:border-error transition-colors"
                 >
-                  ✕
+                  <CrossIcon className="w-4 h-4" />
                 </button>
               </div>
 
@@ -134,7 +166,7 @@ const Sidebar = () => {
                       title={mood.title}
                       style={active ? { filter: `drop-shadow(0 0 4px ${mood.accent})` } : {}}
                     >
-                      {mood.emoji}
+                      {getMoodIcon(mood.iconName, "w-4 h-4")}
                     </button>
                   );
                 })}
@@ -151,12 +183,16 @@ const Sidebar = () => {
           ) : (
             /* Stopped state — compact Start Music button */
             <button
-              onClick={() => { music.setIsPlaying(true); navigate('/study'); }}
+              onClick={() => { 
+                music.setIsPlaying(true); 
+                music.setIsMiniPlayerVisible(true);
+                navigate('/study'); 
+              }}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 border-on-surface/20 hover:border-on-surface text-on-surface-variant hover:text-on-surface transition-all text-xs font-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] group"
             >
-              <span className="text-base">🎵</span>
+              <MusicIcon className="w-4 h-4" />
               <span>Study Music</span>
-              <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">▶</span>
+              <PlayIcon className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity w-3 h-3" />
             </button>
           )}
         </div>
@@ -164,28 +200,55 @@ const Sidebar = () => {
 
       {/* Footer Actions */}
       <div className="mt-4 pt-6 border-t-4 border-on-surface space-y-4">
-        <button
-          onClick={() => navigate('/pricing')}
-          className="w-full bg-secondary text-on-secondary brutal-border shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg py-3 px-4 font-label-bold flex items-center justify-center gap-2 hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0 active:translate-y-0 active:shadow-none"
-        >
-          <Icon name="bolt" className="w-5 h-5 shrink-0" />
-          Upgrade to Pro
-        </button>
-        <div className="space-y-1">
-          <NavLink
-            to="/help"
-            className={({ isActive }) =>
-              `flex items-center gap-3 p-3 rounded-lg border-2 border-transparent transition-all ${
-                isActive
-                  ? 'bg-primary-container !border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] translate-x-[-2px] translate-y-[-2px]'
-                  : 'hover:bg-surface-container-high'
-              }`
-            }
-          >
-            <Icon name="help" className="w-6 h-6 shrink-0" />
-            <span className="font-label-bold">Help</span>
-          </NavLink>
-        </div>
+        {isGuest ? (
+          <div className="bg-primary-container p-4 rounded-xl border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-3">
+            <p className="text-xs font-bold text-on-primary-container">Ingin fitur lengkap? Daftar sekarang!</p>
+            <button
+              onClick={() => navigate('/signup')}
+              className="w-full bg-primary text-white brutal-border py-2 text-sm font-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all"
+            >
+              Daftar Gratis
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="w-full bg-surface text-on-surface border-2 border-on-surface py-2 text-sm font-black rounded-lg hover:bg-surface-container-high transition-all"
+            >
+              Masuk
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={() => navigate('/pricing')}
+              className="w-full bg-secondary text-on-secondary brutal-border shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg py-3 px-4 font-label-bold flex items-center justify-center gap-2 hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0 active:translate-y-0 active:shadow-none"
+            >
+              <Icon name="bolt" className="w-5 h-5 shrink-0" />
+              Upgrade to Pro
+            </button>
+            <div className="space-y-1">
+              <NavLink
+                to="/help"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 p-3 rounded-lg border-2 border-transparent transition-all ${
+                    isActive
+                      ? 'bg-primary-container !border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] translate-x-[-2px] translate-y-[-2px]'
+                      : 'hover:bg-surface-container-high'
+                  }`
+                }
+              >
+                <Icon name="help" className="w-6 h-6 shrink-0" />
+                <span className="font-label-bold">Help</span>
+              </NavLink>
+              <button
+                onClick={logout}
+                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-error/10 text-error transition-all"
+              >
+                <Icon name="logout" className="w-6 h-6 shrink-0" />
+                <span className="font-label-bold">Logout</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );

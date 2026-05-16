@@ -10,36 +10,82 @@ export const UserProfileProvider = ({ children }) => {
     avatarUrl: '',
     email: '',
     role: 'student',
+    friend_code: '',
+    isGuest: false,
   });
 
   const loadProfile = async (userId, email) => {
     const { data } = await supabase
       .from('profiles')
-      .select('full_name, username, avatar_url, role')
+      .select('id, full_name, username, avatar_url, role, friend_code')
       .eq('id', userId)
       .maybeSingle();
 
     if (data) {
       setProfile({
+        id:        data.id,
         fullName:  data.full_name  || '',
         username:  data.username   || '',
         avatarUrl: data.avatar_url || '',
         role:      data.role       || 'student',
+        friendCode: data.friend_code || '',
         email:     email           || '',
+        isGuest:   false,
       });
     }
   };
 
+  const loginAsGuest = () => {
+    localStorage.setItem('harin_guest_session', 'true');
+    setProfile({
+      fullName: 'Tamu Harin',
+      username: 'guest_user',
+      avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Guest',
+      email: '',
+      role: 'student',
+      isGuest: true,
+    });
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('harin_guest_session');
+    setProfile({ 
+      id: '',
+      fullName: '', 
+      username: '', 
+      avatarUrl: '', 
+      email: '', 
+      role: 'student', 
+      friendCode: '',
+      isGuest: false 
+    });
+  };
+
   useEffect(() => {
+    // Check if we have a persisted guest session
+    const persistedGuest = localStorage.getItem('harin_guest_session');
+    if (persistedGuest === 'true') {
+      loginAsGuest();
+    }
+
     // Load on mount if session exists
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) loadProfile(session.user.id, session.user.email);
+      if (session) {
+        localStorage.removeItem('harin_guest_session'); // Clear guest if real session exists
+        loadProfile(session.user.id, session.user.email);
+      }
     });
 
     // Reload on auth change
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      if (session) loadProfile(session.user.id, session.user.email);
-      else setProfile({ fullName: '', username: '', avatarUrl: '', email: '', role: 'student' });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        localStorage.removeItem('harin_guest_session');
+        loadProfile(session.user.id, session.user.email);
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('harin_guest_session');
+        setProfile({ fullName: '', username: '', avatarUrl: '', email: '', role: 'student', isGuest: false });
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -51,7 +97,7 @@ export const UserProfileProvider = ({ children }) => {
   };
 
   return (
-    <UserProfileContext.Provider value={{ profile, updateProfile, loadProfile }}>
+    <UserProfileContext.Provider value={{ profile, updateProfile, loadProfile, loginAsGuest, logout }}>
       {children}
     </UserProfileContext.Provider>
   );

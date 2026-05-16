@@ -6,8 +6,12 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 
+import { useUserProfile } from '../context/UserProfileContext';
+
 const MyCourses = () => {
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -16,31 +20,42 @@ const MyCourses = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/login'); return; }
+      
+      if (!session && !isGuest) {
+        navigate('/login');
+        return;
+      }
 
-      const { data, error } = await supabase
-        .from('enrollments')
-        .select('id, progress, courses(*)')
-        .eq('user_id', session.user.id);
+      if (session) {
+        const { data, error } = await supabase
+          .from('enrollments')
+          .select('id, progress, courses(*)')
+          .eq('user_id', session.user.id);
 
-      if (!error && data) {
-        const mapped = data.map(e => ({
-          enrollmentId: e.id,
-          progress: e.progress || 0,
-          ...e.courses,
-        }));
-        setCourses(mapped);
-        setStats({
-          total: mapped.length,
-          completed: mapped.filter(c => c.progress >= 100).length,
-          inProgress: mapped.filter(c => c.progress > 0 && c.progress < 100).length,
-        });
+        if (!error && data) {
+          const mapped = data.map(e => ({
+            enrollmentId: e.id,
+            progress: e.progress || 0,
+            ...e.courses,
+          }));
+          setCourses(mapped);
+          setStats({
+            total: mapped.length,
+            completed: mapped.filter(c => c.progress >= 100).length,
+            inProgress: mapped.filter(c => c.progress > 0 && c.progress < 100).length,
+          });
+        }
+      } else {
+        // Guest mode: no courses
+        setCourses([]);
+        setStats({ total: 0, completed: 0, inProgress: 0 });
       }
       setLoading(false);
     };
     fetchData();
-  }, [navigate]);
+  }, [navigate, isGuest]);
 
   const filtered = useMemo(() => {
     let result = [...courses];

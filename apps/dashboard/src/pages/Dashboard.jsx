@@ -5,10 +5,15 @@ import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { showToast } from '../lib/toast';
+
+import { useUserProfile } from '../context/UserProfileContext';
+import { WaveIcon, CheckIcon } from '../components/Icons';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [recentPosts, setRecentPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,33 +21,78 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/login'); return; }
-      setUser(session.user);
+      
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      // If no session AND not a guest, redirect to login
+      if (!currentSession && !isGuest) {
+        navigate('/login');
+        return;
+      }
 
       // Redirect teachers
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', session.user.id).single();
-      if (profile?.role === 'teacher') { navigate('/teacher/dashboard'); return; }
+      if (profile.role === 'teacher') {
+        navigate('/teacher/dashboard');
+        return;
+      }
 
-      // Fetch enrolled courses
-      const { data: enrollData } = await supabase
-        .from('enrollments')
-        .select('id, progress, courses(*)')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(4);
-      if (enrollData) setEnrolledCourses(enrollData.map(e => ({ enrollId: e.id, progress: e.progress || 0, ...e.courses })));
+      // Fetch enrolled courses (only if logged in)
+      if (currentSession) {
+        console.log("Fetching enrollments for user:", currentSession.user.id);
+        
+        // Cobalah query yang paling dasar dulu untuk mengetes apakah tabelnya ada
+        const { data: enrollData, error: enrollError } = await supabase
+          .from('enrollments')
+          .select(`
+            id, 
+            progress,
+            course_id,
+            courses (
+              id,
+              title,
+              image_url,
+              category
+            )
+          `)
+          .eq('user_id', currentSession.user.id);
+
+        if (enrollError) {
+          console.error("Enrollment Fetch Error Full Object:", enrollError);
+          // Jika error 400, kemungkinan nama relasi bukan 'courses' tapi 'course'
+          showToast(`Error Database: ${enrollError.message}`, 'error');
+        }
+
+        if (enrollData) {
+          console.log("Raw Enroll Data Received:", enrollData);
+          const mapped = enrollData
+            .map(e => {
+              // Menangani kemungkinan relasi objek atau array
+              const course = Array.isArray(e.courses) ? e.courses[0] : e.courses;
+              if (!course) return null;
+              return { 
+                enrollId: e.id, 
+                progress: e.progress || 0, 
+                ...course 
+              };
+            })
+            .filter(Boolean);
+          
+          setEnrolledCourses(mapped.slice(0, 4));
+        }
+      }
 
       // Fetch recent blog posts
       const { data: posts } = await supabase
-        .from('posts').select('id, title, created_at, category').order('created_at', { ascending: false }).limit(3);
+        .from('posts')
+        .select('id, title, created_at, category')
+        .order('created_at', { ascending: false })
+        .limit(3);
       if (posts) setRecentPosts(posts);
 
       setLoading(false);
     };
     fetchData();
-  }, [navigate]);
+  }, [navigate, isGuest, profile.role]);
 
   const totalProgress = useMemo(() => {
     if (!enrolledCourses.length) return 0;
@@ -73,7 +123,7 @@ const Dashboard = () => {
           <section className="mb-8 relative overflow-hidden bg-primary-container border-2 border-on-surface p-8 md:p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row justify-between items-center gap-6 rounded-xl">
             <div className="max-w-xl relative z-10">
               <h2 className="font-headline-xl font-black mb-3 text-on-surface">
-                Selamat Datang, {user?.user_metadata?.full_name?.split(' ')[0] || 'Pelajar'}! 👋
+                Selamat Datang, {profile.fullName?.split(' ')[0] || 'Pelajar'}! <WaveIcon className="inline-block w-8 h-8 md:w-10 md:h-10 ml-2 text-on-surface" />
               </h2>
               <p className="font-body-lg text-on-surface-variant mb-6">
                 {enrolledCourses.length > 0
@@ -150,7 +200,7 @@ const Dashboard = () => {
                             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${course.progress}%` }} />
                           </div>
                           <p className="text-xs text-on-surface-variant mt-1.5">
-                            {course.progress === 0 ? 'Belum dimulai' : course.progress >= 100 ? '✅ Selesai' : 'Sedang berjalan'}
+                            {course.progress === 0 ? 'Belum dimulai' : course.progress >= 100 ? <span className="flex items-center gap-1"><CheckIcon className="w-4 h-4 text-green-600" /> Selesai</span> : 'Sedang berjalan'}
                           </p>
                         </div>
                       </div>

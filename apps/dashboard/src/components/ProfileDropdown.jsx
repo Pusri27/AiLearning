@@ -6,14 +6,15 @@ import { useUserProfile } from '../context/UserProfileContext';
 
 const ProfileDropdown = () => {
   const navigate = useNavigate();
-  const { profile } = useUserProfile();
+  const { profile, logout } = useUserProfile();
+  const isGuest = profile.isGuest;
 
   const initials = profile.fullName
     ? profile.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     navigate('/login');
   };
 
@@ -43,7 +44,7 @@ const ProfileDropdown = () => {
           <p className="text-xs text-on-surface-variant line-clamp-1">{profile.email || 'Not logged in'}</p>
         </div>
         <div className="p-1">
-          {profile.email ? (
+          {!isGuest && profile.email ? (
             <>
               <button
                 onClick={() => navigate('/profile')}
@@ -78,13 +79,22 @@ const ProfileDropdown = () => {
               </button>
             </>
           ) : (
-            <button
-              onClick={() => navigate('/login')}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
-            >
-              <Icon name="arrow_forward" className="w-5 h-5" />
-              Login / Sign Up
-            </button>
+            <>
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
+              >
+                <Icon name="login" className="w-5 h-5" />
+                Login
+              </button>
+              <button
+                onClick={() => navigate('/signup')}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
+              >
+                <Icon name="person_add" className="w-5 h-5" />
+                Sign Up
+              </button>
+            </>
           )}
         </div>
       </div>

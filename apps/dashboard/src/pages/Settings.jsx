@@ -24,12 +24,246 @@ const friendlyError = (err) => {
 };
 
 // ── Toast ─────────────────────────────────────────────────────────
+// ── Enhanced Toast Banner ─────────────────────────────────────────
 const ToastBanner = ({ msg, type }) => {
   if (!msg) return null;
+  const isError = type === 'error';
+  
   return (
-    <div className={`fixed top-6 right-6 z-[200] flex items-center gap-3 px-5 py-3 border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-label-bold text-sm transition-all ${type === 'error' ? 'bg-error text-on-error' : 'bg-on-surface text-surface'}`}>
-      <Icon name={type === 'error' ? 'error' : 'check_circle'} className="w-5 h-5 shrink-0" />
-      {msg}
+    <div className={`fixed top-8 right-8 z-[300] flex items-center gap-4 px-6 py-4 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] animate-in slide-in-from-right-8 duration-300 font-black text-sm
+      ${isError ? 'bg-error text-white' : 'bg-primary-container text-on-primary-container'}`}>
+      <div className={`w-8 h-8 rounded-full border-2 border-on-surface flex items-center justify-center shrink-0 ${isError ? 'bg-white text-error' : 'bg-on-surface text-white'}`}>
+        <Icon name={isError ? 'priority_high' : 'check'} className="w-5 h-5" />
+      </div>
+      <div className="flex-1">
+        <p className="uppercase tracking-widest text-[10px] opacity-70 mb-0.5">{isError ? 'Terjadi Masalah' : 'Berhasil'}</p>
+        <p className="leading-tight">{msg}</p>
+      </div>
+    </div>
+  );
+};
+
+// ── Payment Methods Manager Component ──────────────────────────
+const PaymentMethodsManager = ({ showToast }) => {
+  const [methods, setMethods] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [newMethod, setNewMethod] = useState({ type: 'bank', provider: 'BCA', accountNumber: '' });
+
+  useEffect(() => {
+    fetchMethods();
+  }, []);
+
+  const fetchMethods = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data, error } = await supabase
+      .from('payment_methods')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (!error) setMethods(data || []);
+    setLoading(false);
+  };
+
+  const handleAddManual = async (e) => {
+    e.preventDefault();
+    if (!newMethod.accountNumber.trim()) return;
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase.from('payment_methods').insert({
+      user_id: session.user.id,
+      type: newMethod.type,
+      provider: newMethod.provider,
+      account_number: newMethod.accountNumber,
+      is_default: methods.length === 0 
+    }).select().single();
+
+    if (!error && data) {
+      setMethods([data, ...methods]);
+      setIsAdding(false);
+      setNewMethod({ type: 'bank', provider: 'BCA', accountNumber: '' });
+      showToast('Metode pembayaran berhasil ditambahkan!');
+    } else {
+      showToast('Gagal menambahkan metode pembayaran.', 'error');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
+    const { error } = await supabase.from('payment_methods').delete().eq('id', confirmDeleteId);
+    if (!error) {
+      setMethods(methods.filter(m => m.id !== confirmDeleteId));
+      setConfirmDeleteId(null);
+      showToast('Metode pembayaran berhasil dihapus.');
+    } else {
+      showToast('Gagal menghapus metode pembayaran.', 'error');
+    }
+  };
+
+  const handleSetDefault = async (id) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    // 1. Reset all to false
+    await supabase.from('payment_methods').update({ is_default: false }).eq('user_id', session.user.id);
+    // 2. Set target to true
+    const { error } = await supabase.from('payment_methods').update({ is_default: true }).eq('id', id);
+    
+    if (!error) {
+      setMethods(methods.map(m => ({ ...m, is_default: m.id === id })));
+      showToast('Metode utama berhasil diperbarui.');
+    } else {
+      showToast('Gagal memperbarui metode utama.', 'error');
+    }
+  };
+
+  if (loading) return <div className="h-20 bg-surface-container animate-pulse border-2 border-on-surface" />;
+
+  return (
+    <div className="space-y-6">
+      {/* Header & Add Button */}
+      <div className="flex justify-between items-center">
+        <h4 className="font-label-bold uppercase text-xs text-on-surface-variant">Metode Tersimpan ({methods.length})</h4>
+        <button 
+          onClick={() => setIsAdding(!isAdding)}
+          className={`flex items-center gap-2 px-4 py-2 border-2 border-on-surface font-label-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all ${isAdding ? 'bg-error text-white' : 'bg-primary-container text-on-surface hover:translate-x-[-1px] hover:translate-y-[-1px]'}`}
+        >
+          <Icon name={isAdding ? 'close' : 'add'} className="w-4 h-4" />
+          {isAdding ? 'Batal' : 'Tambah Manual'}
+        </button>
+      </div>
+
+      {/* Add Form */}
+      {isAdding && (
+        <form onSubmit={handleAddManual} className="bg-white border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1.5">Tipe</label>
+              <select 
+                value={newMethod.type}
+                onChange={e => setNewMethod({ ...newMethod, type: e.target.value, provider: e.target.value === 'bank' ? 'BCA' : e.target.value === 'card' ? 'Visa' : 'GoPay' })}
+                className="w-full bg-surface-container border-2 border-on-surface p-2.5 text-sm font-bold focus:ring-0"
+              >
+                <option value="bank">Transfer Bank</option>
+                <option value="card">Kartu Kredit/Debit</option>
+                <option value="wallet">E-Wallet</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1.5">Penyedia (Provider)</label>
+              {newMethod.type === 'bank' ? (
+                <select value={newMethod.provider} onChange={e => setNewMethod({ ...newMethod, provider: e.target.value })} className="w-full bg-surface-container border-2 border-on-surface p-2.5 text-sm font-bold focus:ring-0">
+                  {['BCA', 'Mandiri', 'BNI', 'BRI'].map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              ) : newMethod.type === 'wallet' ? (
+                <select value={newMethod.provider} onChange={e => setNewMethod({ ...newMethod, provider: e.target.value })} className="w-full bg-surface-container border-2 border-on-surface p-2.5 text-sm font-bold focus:ring-0">
+                  {['GoPay', 'OVO', 'Dana', 'ShopeePay'].map(w => <option key={w} value={w}>{w}</option>)}
+                </select>
+              ) : (
+                <select value={newMethod.provider} onChange={e => setNewMethod({ ...newMethod, provider: e.target.value })} className="w-full bg-surface-container border-2 border-on-surface p-2.5 text-sm font-bold focus:ring-0">
+                  {['Visa', 'Mastercard', 'JCB', 'American Express'].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black uppercase mb-1.5">
+              {newMethod.type === 'bank' ? 'Nomor Rekening' : newMethod.type === 'card' ? 'Nomor Kartu' : 'Nomor Handphone'}
+            </label>
+            <input 
+              type="text" 
+              placeholder={newMethod.type === 'bank' ? 'Contoh: 1234567890' : newMethod.type === 'card' ? 'Contoh: 4111 2222 3333 4444' : 'Contoh: 0812 3456 7890'}
+              required
+              value={newMethod.accountNumber}
+              onChange={e => setNewMethod({ ...newMethod, accountNumber: e.target.value })}
+              className="w-full bg-surface-container border-2 border-on-surface p-2.5 text-sm font-bold focus:ring-0" 
+            />
+          </div>
+          <button type="submit" className="w-full bg-on-surface text-white py-3 font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] hover:translate-y-[-2px] transition-all">
+            Simpan Metode Pembayaran
+          </button>
+        </form>
+      )}
+
+      {/* List */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {methods.length === 0 && !isAdding ? (
+          <div className="col-span-full p-8 border-2 border-on-surface border-dashed rounded-xl text-center bg-surface-container/30">
+            <Icon name="payments" className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <p className="text-sm font-bold text-on-surface-variant">Belum ada metode pembayaran tersimpan.</p>
+          </div>
+        ) : (
+          methods.map(method => (
+            <div key={method.id} className={`bg-surface-container-lowest border-2 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex justify-between items-start group relative ${method.is_default ? 'border-primary ring-2 ring-primary ring-offset-2' : 'border-on-surface'}`}>
+              <div className="flex gap-3">
+                <div className={`w-10 h-10 bg-white border-2 flex items-center justify-center shrink-0 ${method.is_default ? 'border-primary text-primary' : 'border-on-surface'}`}>
+                  <Icon name={method.type === 'bank' ? 'account_balance' : method.type === 'card' ? 'credit_card' : 'payments'} className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h5 className="font-label-bold text-sm truncate uppercase">{method.provider}</h5>
+                    {method.is_default && (
+                      <span className="bg-primary text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">Utama</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-on-surface-variant font-mono mt-0.5">
+                    {method.type === 'card' ? `•••• ${method.account_number.slice(-4)}` : method.account_number}
+                  </p>
+                  {!method.is_default && (
+                    <button 
+                      type="button"
+                      onClick={() => handleSetDefault(method.id)}
+                      className="text-[10px] font-bold text-primary hover:underline mt-1"
+                    >
+                      Jadikan Utama
+                    </button>
+                  )}
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setConfirmDeleteId(method.id)}
+                className="text-on-surface-variant hover:text-error p-1 transition-colors"
+              >
+                <Icon name="delete" className="w-5 h-5" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-on-surface/40 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
+          <div className="relative bg-white border-4 border-on-surface p-8 max-w-sm w-full shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-error">
+              <Icon name="delete_forever" className="w-10 h-10" />
+            </div>
+            <h5 className="text-xl font-black text-center mb-2">Hapus Metode?</h5>
+            <p className="text-sm text-center text-on-surface-variant mb-8 leading-relaxed">
+              Anda tidak akan bisa menggunakan metode ini lagi untuk transaksi cepat. Anda yakin?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={handleDelete}
+                className="w-full bg-error text-white py-3 font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] hover:translate-y-[-2px] transition-all"
+              >
+                Ya, Hapus Sekarang
+              </button>
+              <button 
+                onClick={() => setConfirmDeleteId(null)}
+                className="w-full bg-surface-container border-2 border-on-surface py-3 font-black hover:translate-y-[-2px] transition-all"
+              >
+                Batalkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -300,6 +534,19 @@ const Settings = () => {
                     </select>
                   </div>
                 </div>
+              </div>
+            </section>
+
+            <hr className="border-t-2 border-on-surface" />
+            
+            {/* ── Payment Methods Section ────────────────────────── */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+              <div className="md:col-span-1">
+                <h3 className="font-headline-lg text-headline-lg text-on-surface">Metode Pembayaran</h3>
+                <p className="font-body-md text-body-md text-on-surface-variant mt-2">Kelola kartu atau dompet digital yang Anda gunakan untuk transaksi.</p>
+              </div>
+              <div className="md:col-span-2 space-y-4">
+                <PaymentMethodsManager showToast={showToast} />
               </div>
             </section>
 

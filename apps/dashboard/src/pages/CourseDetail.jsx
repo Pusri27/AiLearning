@@ -6,17 +6,25 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { showToast, friendlyError } from '../lib/toast';
+import { useUserProfile } from '../context/UserProfileContext';
 
 const CourseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [showGuestPrompt, setShowGuestPrompt] = useState(false);
 
   useEffect(() => {
     fetchCourse();
-  }, [id]);
+    if (isGuest) {
+      const timer = setTimeout(() => setShowGuestPrompt(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [id, isGuest]);
 
   const fetchCourse = async () => {
     setLoading(true);
@@ -28,7 +36,6 @@ const CourseDetail = () => {
 
     if (error) {
       console.error('Error fetching course:', error);
-      // Fallback if ID is a string slug from old hardcoded data
       if (id === 'ai-engineering') {
          setCourse({
            id: 'ai-engineering',
@@ -48,7 +55,6 @@ const CourseDetail = () => {
       }
     } else {
       setCourse(data);
-      // Cek apakah sudah terdaftar
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { data: enrollment } = await supabase
@@ -68,6 +74,10 @@ const CourseDetail = () => {
   };
 
   const handleAddToCart = async () => {
+    if (isGuest) {
+      setShowGuestPrompt(true);
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       navigate('/login');
@@ -76,9 +86,7 @@ const CourseDetail = () => {
 
     const { error } = await supabase
       .from('cart')
-      .insert([
-        { user_id: session.user.id, course_id: course.id }
-      ]);
+      .insert([{ user_id: session.user.id, course_id: course.id }]);
 
     if (error) {
       if (error.code === '23505') {
@@ -110,7 +118,7 @@ const CourseDetail = () => {
   }
 
   return (
-    <div className="bg-background text-on-background font-body-md flex h-screen overflow-hidden">
+    <div className="bg-background text-on-background font-body-md flex h-screen overflow-hidden relative">
       <Sidebar />
       
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -172,7 +180,7 @@ const CourseDetail = () => {
                 ) : (
                   <>
                     <button 
-                      onClick={() => navigate('/checkout', { state: { courseId: course.id } })}
+                      onClick={() => isGuest ? setShowGuestPrompt(true) : navigate('/checkout', { state: { courseId: course.id } })}
                       className="px-8 py-4 bg-tertiary text-on-tertiary rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1"
                     >
                       Beli Sekarang
@@ -223,7 +231,6 @@ const CourseDetail = () => {
                       <p className="text-sm text-on-surface-variant">Create Retrieval-Augmented Generation applications.</p>
                     </div>
                   </div>
-                  {/* ... other points ... */}
                 </div>
               </section>
             </div>
@@ -250,6 +257,67 @@ const CourseDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Guest Prompt Animation ────────────────────────────────── */}
+      {isGuest && (
+        <div 
+          className={`fixed inset-0 z-[100] flex items-center justify-center transition-all duration-700 ${showGuestPrompt ? 'bg-black/60 backdrop-blur-sm opacity-100' : 'opacity-0 pointer-events-none'}`}
+        >
+           <div 
+             className={`bg-primary-container p-8 rounded-2xl border-4 border-on-surface shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] space-y-5 max-w-sm w-full transition-all duration-700 ease-out transform pointer-events-auto relative z-[110]
+               ${showGuestPrompt 
+                 ? 'scale-100 translate-x-0 translate-y-0 opacity-100' 
+                 : 'scale-50 -translate-x-[40vw] translate-y-[40vh] opacity-0'
+               }`}
+           >
+             <div className="flex justify-between items-start">
+               <div className="bg-primary text-white p-2 rounded-lg border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                 <Icon name="lock" className="w-8 h-8" />
+               </div>
+               <button 
+                 type="button"
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   navigate('/catalog');
+                 }} 
+                 className="text-on-surface hover:text-error transition-colors p-2 bg-white/20 rounded-full border border-on-surface/10"
+               >
+                 <Icon name="close" className="w-6 h-6" />
+               </button>
+             </div>
+             <div className="space-y-2">
+               <h3 className="font-headline-lg text-2xl font-black text-on-primary-container">Eits, Tunggu Dulu!</h3>
+               <p className="text-sm font-bold text-on-primary-container/80 leading-relaxed">
+                 Kamu sedang dalam mode tamu. Untuk membeli kursus ini dan mengakses materi lengkap, silakan daftar atau masuk ke akunmu ya!
+               </p>
+             </div>
+             <div className="space-y-3 pt-2">
+               <button
+                 type="button"
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   navigate('/signup');
+                 }}
+                 className="w-full bg-primary text-white brutal-border py-4 text-lg font-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+               >
+                 <Icon name="person_add" className="w-5 h-5" />
+                 Daftar Sekarang — Gratis!
+               </button>
+               <button
+                 type="button"
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   navigate('/login');
+                 }}
+                 className="w-full bg-white text-on-surface border-4 border-on-surface py-3 text-sm font-black rounded-xl hover:bg-surface-container transition-all cursor-pointer"
+               >
+                 Sudah punya akun? Masuk
+               </button>
+             </div>
+             <p className="text-[10px] text-center font-bold text-on-primary-container/50 uppercase tracking-widest">Harin Learning Student Portal</p>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

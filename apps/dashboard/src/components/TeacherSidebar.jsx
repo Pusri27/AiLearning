@@ -21,6 +21,7 @@ const TeacherSidebar = ({ user }) => {
     { name: 'My Courses', icon: 'auto_stories', path: '/teacher/courses' },
     { name: 'Students', icon: 'group', path: '/teacher/students' },
     { name: 'Analytics', icon: 'monitoring', path: '/teacher/analytics' },
+    { name: 'Community', icon: 'groups', path: '/community' },
     { name: 'Activity', icon: 'history', path: '/teacher/activity' },
     { name: 'Settings', icon: 'settings', path: '/teacher/settings' },
   ];

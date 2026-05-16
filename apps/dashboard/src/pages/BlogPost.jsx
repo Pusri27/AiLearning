@@ -4,9 +4,13 @@ import { supabase } from '../lib/supabaseClient';
 import Sidebar from '../components/Sidebar';
 import Icon from '../components/Icon';
 
+import { useUserProfile } from '../context/UserProfileContext';
+
 const BlogPost = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -68,6 +72,9 @@ const BlogPost = () => {
     );
   }
 
+  const paragraphs = post.content.split('\n').filter(p => p.trim());
+  const displayParagraphs = isGuest ? paragraphs.slice(0, 3) : paragraphs;
+
   return (
     <div className="bg-background text-on-surface font-plus-jakarta flex h-screen overflow-hidden">
       <Sidebar />
@@ -119,58 +126,99 @@ const BlogPost = () => {
           <div className="border-t-4 border-on-surface mb-8" />
 
           {/* Body */}
-          <div className="prose prose-lg max-w-none text-on-surface leading-relaxed space-y-6">
-            {post.content.split('\n').filter(p => p.trim()).map((paragraph, i) => (
+          <div className="prose prose-lg max-w-none text-on-surface leading-relaxed space-y-6 relative">
+            {displayParagraphs.map((paragraph, i) => (
               <p key={i} className="font-body-lg text-on-surface-variant text-lg leading-8">
                 {paragraph}
               </p>
             ))}
+
+            {isGuest && (
+              <div className="relative">
+                {/* The blurred paragraph part */}
+                <p className="font-body-lg text-on-surface-variant text-lg leading-8 blur-[4px] select-none opacity-40">
+                  {paragraphs[3] || 'Lanjutan konten artikel yang sangat menarik dan mendalam untuk dibaca sampai tuntas...'}
+                </p>
+                
+                {/* The login prompt card */}
+                <div className="absolute -top-10 left-0 right-0 pt-20 pb-10 bg-gradient-to-t from-background via-background/95 to-transparent flex flex-col items-center text-center px-4">
+                  <div className="bg-surface border-4 border-on-surface p-8 rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-w-sm space-y-4">
+                    <div className="w-16 h-16 bg-secondary-container text-secondary rounded-full flex items-center justify-center mx-auto border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <Icon name="lock" className="w-8 h-8" />
+                    </div>
+                    <h3 className="font-headline-md text-xl font-black">Lanjutkan Membaca</h3>
+                    <p className="text-sm font-bold text-on-surface-variant">
+                      Daftar atau masuk untuk membaca seluruh artikel ini dan ribuan artikel bermanfaat lainnya.
+                    </p>
+                    <div className="flex flex-col gap-2 pt-2">
+                      <button 
+                        onClick={() => navigate('/signup')}
+                        className="bg-primary text-white font-black py-3 rounded-lg border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all"
+                      >
+                        Daftar Gratis
+                      </button>
+                      <button 
+                        onClick={() => navigate('/login')}
+                        className="text-on-surface font-bold text-sm hover:underline"
+                      >
+                        Masuk
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Share / Actions */}
-          <div className="border-t-4 border-on-surface mt-12 pt-8 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 border-2 border-on-surface px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
-                <Icon name="favorite" className="w-4 h-4 text-error" />
-                Suka
-              </button>
-              <button className="flex items-center gap-2 border-2 border-on-surface px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
-                <Icon name="share" className="w-4 h-4" />
-                Bagikan
-              </button>
-              <button className="flex items-center gap-2 border-2 border-on-surface px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
-                <Icon name="bookmark" className="w-4 h-4" />
-                Simpan
-              </button>
+          {!isGuest && (
+            <div className="border-t-4 border-on-surface mt-12 pt-8 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <button className="flex items-center gap-2 border-2 border-on-surface px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                  <Icon name="favorite" className="w-4 h-4 text-error" />
+                  Suka
+                </button>
+                <button className="flex items-center gap-2 border-2 border-on-surface px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                  <Icon name="share" className="w-4 h-4" />
+                  Bagikan
+                </button>
+                <button className="flex items-center gap-2 border-2 border-on-surface px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                  <Icon name="bookmark" className="w-4 h-4" />
+                  Simpan
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                {currentUserId === post.author_id && (
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => navigate(`/edit-post/${post.id}`)}
+                      className="flex items-center gap-2 border-2 border-primary text-primary px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                    >
+                      <Icon name="edit" className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => setShowDeleteModal(true)}
+                      className="flex items-center gap-2 border-2 border-error text-error px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all bg-error-container"
+                    >
+                      <Icon name="delete" className="w-4 h-4" />
+                      Hapus
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-            
-            <div className="flex items-center gap-4">
-              {currentUserId === post.author_id && (
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => navigate(`/edit-post/${post.id}`)}
-                    className="flex items-center gap-2 border-2 border-primary text-primary px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
-                  >
-                    <Icon name="edit" className="w-4 h-4" />
-                    Edit
-                  </button>
-                  <button 
-                    onClick={() => setShowDeleteModal(true)}
-                    className="flex items-center gap-2 border-2 border-error text-error px-4 py-2 rounded-lg font-label-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all bg-error-container"
-                  >
-                    <Icon name="delete" className="w-4 h-4" />
-                    Hapus
-                  </button>
-                </div>
-              )}
-              <button
-                onClick={() => navigate('/blog')}
-                className="flex items-center gap-2 text-primary font-label-bold text-sm hover:underline"
-              >
-                <Icon name="arrow_back" className="w-4 h-4" />
-                Kembali ke Blog
-              </button>
-            </div>
+          )}
+          
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={() => navigate('/blog')}
+              className="flex items-center gap-2 text-primary font-label-bold text-sm hover:underline"
+            >
+              <Icon name="arrow_back" className="w-4 h-4" />
+              Kembali ke Blog
+            </button>
           </div>
         </article>
       </main>

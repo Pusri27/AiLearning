@@ -5,6 +5,8 @@ import Sidebar from '../components/Sidebar';
 import Icon from '../components/Icon';
 import { showToast, friendlyError } from '../lib/toast';
 import { awardAchievement } from '../lib/achievementService';
+import { useUserProfile } from '../context/UserProfileContext';
+import { WarningIcon, TadaIcon } from '../components/Icons';
 
 // ── Category Groups with SVG Icon Names ──────────────────────────
 const CATEGORY_GROUPS = [
@@ -164,6 +166,8 @@ const CategoryPicker = ({ value, onChange }) => {
 const WritePost = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const isEditing = !!id;
 
   const [loading,  setLoading]  = useState(false);
@@ -190,6 +194,10 @@ const WritePost = () => {
 
   const handlePublish = async (e) => {
     e.preventDefault();
+    if (isGuest) {
+      showToast('Fitur ini hanya tersedia untuk pengguna terdaftar.', 'error');
+      return;
+    }
     if (!title || !content) { setError('Judul dan konten tidak boleh kosong.'); return; }
     setLoading(true);
     setError(null);
@@ -206,7 +214,7 @@ const WritePost = () => {
         }).eq('id', id);
         if (postError) throw postError;
 
-        showToast('Postingan berhasil diperbarui! 🎉');
+        showToast('Postingan berhasil diperbarui!');
         navigate(`/blog/${id}`);
       } else {
         const { error: postError } = await supabase.from('posts').insert({
@@ -229,7 +237,7 @@ const WritePost = () => {
         // Lencana Author
         await awardAchievement(user.id, 'author');
 
-        showToast('Postingan berhasil diterbitkan! 🎉');
+        showToast('Postingan berhasil diterbitkan!');
         navigate('/blog');
       }
 
@@ -239,6 +247,48 @@ const WritePost = () => {
       setLoading(false);
     }
   };
+
+  if (isGuest) {
+    return (
+      <div className="bg-background text-on-background font-plus-jakarta flex h-screen overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="bg-white border-4 border-on-background p-10 rounded-3xl shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] max-w-md w-full text-center space-y-6">
+            <div className="w-24 h-24 bg-primary-container text-primary rounded-2xl flex items-center justify-center mx-auto border-4 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rotate-3">
+              <Icon name="edit_note" className="w-12 h-12" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="font-headline-xl text-3xl font-black">Tuangkan Ide Kamu!</h2>
+              <p className="font-bold text-on-surface-variant leading-relaxed">
+                Menulis artikel adalah fitur eksklusif untuk kontributor Harin. Yuk, daftar atau masuk untuk mulai berbagi pengetahuan dengan komunitas!
+              </p>
+            </div>
+            <div className="space-y-4 pt-4">
+              <button
+                onClick={() => navigate('/signup')}
+                className="w-full bg-primary text-white py-4 text-xl font-black rounded-xl border-2 border-on-background shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all"
+              >
+                Daftar Jadi Penulis
+              </button>
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full bg-white text-on-surface py-3 text-sm font-bold rounded-xl border-2 border-on-background hover:bg-surface-container transition-all"
+              >
+                Masuk ke Akun
+              </button>
+            </div>
+            <button 
+              onClick={() => navigate('/blog')}
+              className="text-primary font-black hover:underline flex items-center justify-center gap-2 mx-auto pt-2"
+            >
+              <Icon name="arrow_back" className="w-4 h-4" />
+              Kembali ke Blog
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-background text-on-background font-plus-jakarta flex h-screen overflow-hidden">

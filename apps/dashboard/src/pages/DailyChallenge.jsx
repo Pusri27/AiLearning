@@ -3,9 +3,48 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Icon from '../components/Icon';
 
+import { useUserProfile } from '../context/UserProfileContext';
+
 const DailyChallenge = () => {
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [selectedOption, setSelectedOption] = useState(null);
+
+  if (isGuest) {
+    return (
+      <div className="bg-surface text-on-surface font-body-md flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="bg-primary-container p-10 rounded-3xl border-4 border-on-surface shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] text-center space-y-6 max-w-md">
+            <div className="w-20 h-20 bg-primary text-white rounded-2xl flex items-center justify-center mx-auto border-4 border-on-surface rotate-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Icon name="lock" className="w-10 h-10" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="font-headline-xl text-3xl font-black text-on-primary-container">Login Diperlukan</h2>
+              <p className="font-bold text-on-primary-container/70 leading-relaxed">
+                Tantangan harian tersedia khusus untuk pengguna terdaftar agar kami bisa melacak progress dan streak kamu!
+              </p>
+            </div>
+            <div className="space-y-4">
+              <button
+                onClick={() => navigate('/signup')}
+                className="w-full bg-primary text-white py-4 text-lg font-black rounded-xl border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all"
+              >
+                Daftar Gratis
+              </button>
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full bg-white text-on-surface py-3 text-sm font-bold rounded-xl border-2 border-on-surface hover:bg-surface-container transition-all"
+              >
+                Masuk ke Akun
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-surface text-on-surface font-body-md flex h-screen overflow-hidden">

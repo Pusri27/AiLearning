@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { useUserProfile } from '../context/UserProfileContext';
 
 // ── Lightweight markdown renderer ──────────────────────────────────
 const renderMarkdown = (text) => {
@@ -47,6 +48,8 @@ const inlineFormat = (text) => {
 };
 
 const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: `Halo ${userName}! Saya Harin AI, asisten pribadimu. Ada yang bisa saya bantu terkait ${userRole === 'teacher' ? 'manajemen kelas' : 'perjalanan belajarmu'}?` }
@@ -88,6 +91,21 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+
+    if (isGuest) {
+      const userMsg = { role: 'user', content: input };
+      setMessages(prev => [...prev, userMsg]);
+      setInput('');
+      setLoading(true);
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: "Halo! Sebagai tamu, akses obrolan saya agak terbatas. Yuk, daftar akun Harin Learning dulu supaya kita bisa ngobrol lebih seru dan saya bisa bantu belajarmu lebih maksimal!" 
+        }]);
+        setLoading(false);
+      }, 800);
+      return;
+    }
 
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);

@@ -6,6 +6,31 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { useMusicPlayer } from '../context/MusicPlayerContext';
+import { 
+  CloudIcon, 
+  SparklesIcon, 
+  WarningIcon, 
+  MusicIcon, 
+  BrainIcon, 
+  PianoIcon, 
+  RainIcon, 
+  CoffeeIcon, 
+  FogIcon,
+  PlayIcon,
+  PauseIcon
+} from '../components/Icons';
+
+const getMoodIcon = (iconName, className) => {
+  switch (iconName) {
+    case 'music': return <MusicIcon className={className} />;
+    case 'brain': return <BrainIcon className={className} />;
+    case 'piano': return <PianoIcon className={className} />;
+    case 'rain': return <RainIcon className={className} />;
+    case 'coffee': return <CoffeeIcon className={className} />;
+    case 'fog': return <FogIcon className={className} />;
+    default: return null;
+  }
+};
 
 // ─── Pomodoro Timer ───────────────────────────────────────────────
 const PRESETS = [
@@ -338,7 +363,7 @@ function AIStudyPlanner() {
       <div className="flex justify-between items-center">
         <div>
           <h3 className="font-headline-md text-on-tertiary-fixed">AI Study Planner</h3>
-          <p className="text-[10px] font-black text-on-tertiary-fixed opacity-50 mt-0.5">Tersimpan otomatis ☁️</p>
+          <p className="text-[10px] font-black text-on-tertiary-fixed opacity-50 mt-0.5 flex items-center gap-1">Tersimpan otomatis <CloudIcon className="w-3 h-3" /></p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-black text-on-tertiary-fixed opacity-60">{completed}/{tasks.length}</span>
@@ -348,7 +373,7 @@ function AIStudyPlanner() {
 
       {/* AI Generate Input */}
       <div className="flex flex-col gap-2 p-3 bg-black/10 rounded-lg border border-on-surface/20">
-        <p className="text-xs font-black text-on-tertiary-fixed opacity-70 uppercase tracking-wider">✨ Generate dengan AI</p>
+        <p className="text-xs font-black text-on-tertiary-fixed opacity-70 uppercase tracking-wider flex items-center gap-1"><SparklesIcon className="w-3 h-3" /> Generate dengan AI</p>
         <div className="flex gap-2">
           <input
             className="flex-1 rounded-lg h-9 border-2 border-on-surface bg-white/80 px-3 text-sm font-body-md focus:outline-none focus:ring-0 placeholder:opacity-50"
@@ -366,7 +391,7 @@ function AIStudyPlanner() {
           </button>
         </div>
         {aiError && <p className="text-xs text-error font-bold">{aiError}</p>}
-        <p className="text-[10px] text-on-tertiary-fixed opacity-40 italic">⚠️ Generate baru menggantikan rencana lama</p>
+        <p className="text-[10px] text-on-tertiary-fixed opacity-40 italic flex items-center gap-1"><WarningIcon className="w-3 h-3" /> Generate baru menggantikan rencana lama</p>
       </div>
 
       {/* Task List */}
@@ -412,14 +437,7 @@ function AIStudyPlanner() {
 }
 
 // ─── Mood Playlists ───────────────────────────────────────────────
-const MOODS = [
-  { title: 'Lo-fi Beats',    desc: 'Chill rhythmic loops to keep momentum going.',   emoji: '🎵', accent: '#a78bfa', chip: 'bg-violet-100 border-violet-400', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400', youtubeId: 'jfKfPfyJRdk' },
-  { title: 'Deep Focus',     desc: 'Binaural beats & soft drones for deep work.',    emoji: '🧠', accent: '#60a5fa', chip: 'bg-blue-100 border-blue-400',   img: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&q=80&w=400', youtubeId: '5qap5aO4i9A' },
-  { title: 'Classical',      desc: 'Timeless piano for reading & problem solving.',  emoji: '🎹', accent: '#f59e0b', chip: 'bg-amber-100 border-amber-400', img: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?auto=format&fit=crop&q=80&w=400', youtubeId: 'mDX8QrcDI_g' },
-  { title: 'Nature Ambient', desc: 'Rain & ocean waves to block distractions.',      emoji: '🌧️', accent: '#34d399', chip: 'bg-emerald-100 border-emerald-400', img: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&q=80&w=400', youtubeId: 'eKFTSSKCzWA' },
-  { title: 'Jazz Cafe',      desc: 'Smooth jazz for a cozy café atmosphere.',        emoji: '☕', accent: '#f97316', chip: 'bg-orange-100 border-orange-400', img: 'https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?auto=format&fit=crop&q=80&w=400', youtubeId: 'HuFYqnbVbzY' },
-  { title: 'White Noise',    desc: 'Pure steady noise to drown out distractions.',   emoji: '🌫️', accent: '#94a3b8', chip: 'bg-slate-100 border-slate-400',  img: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&q=80&w=400', youtubeId: 'nMfPqeZjc2c' },
-];
+// (Removed local MOODS array as it is handled by MusicPlayerContext)
 
 // Animated equalizer bars component
 const EqualizerBars = ({ color = '#000' }) => (
@@ -439,10 +457,17 @@ const EqualizerBars = ({ color = '#000' }) => (
 );
 
 // ─── Main Page ────────────────────────────────────────────────────
+import { useUserProfile } from '../context/UserProfileContext';
+
 const StudySpace = () => {
   const navigate = useNavigate();
-  // Use global music context — iframe lives in PersistentMusicPlayer (always mounted)
-  const { activeMood, isPlaying, iframeKey, moods, play, setIsPlaying } = useMusicPlayer();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
+  const { activeMood, isPlaying, moods, play, playCustom, setIsPlaying, customPlaylists } = useMusicPlayer();
+
+  const handleMoodClick = (mood) => {
+    play(mood);
+  };
 
   return (
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
@@ -477,7 +502,7 @@ const StudySpace = () => {
                 style={{ backgroundColor: activeMood.accent + '30' }}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{activeMood.emoji}</span>
+                  <span className="text-lg">{getMoodIcon(activeMood.iconName, "w-6 h-6")}</span>
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-on-surface opacity-60">Study Tunes</p>
                     <h3 className="font-headline-md text-on-surface leading-tight">{activeMood.title}</h3>
@@ -512,7 +537,7 @@ const StudySpace = () => {
                     className="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center text-white text-3xl shadow-lg group-hover:scale-110 transition-transform"
                     style={{ backgroundColor: activeMood.accent + 'cc' }}
                   >
-                    {isPlaying ? '⏸' : '▶'}
+                    {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
                   </div>
                 </button>
                 {/* Mood name on thumbnail */}
@@ -524,10 +549,36 @@ const StudySpace = () => {
               </div>
 
               {/* Description + mood pills */}
-              <div className="p-4 flex flex-col gap-3 flex-1">
+              <div className="p-4 flex flex-col gap-4 flex-1">
                 <p className="text-xs text-on-surface-variant font-bold leading-relaxed">{activeMood.desc}</p>
+                
+                {/* Custom Link Input */}
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Paste YouTube link here..."
+                    className="flex-1 bg-white/50 border-2 border-on-surface/20 rounded-lg px-3 py-1.5 text-[11px] font-bold focus:bg-white focus:border-on-surface outline-none transition-all"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        playCustom(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  <button 
+                    onClick={(e) => {
+                      const input = e.currentTarget.previousSibling;
+                      playCustom(input.value);
+                      input.value = '';
+                    }}
+                    className="px-3 bg-on-surface text-white rounded-lg border-2 border-on-surface text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all"
+                  >
+                    Play
+                  </button>
+                </div>
+
                 {/* Mood selector pills */}
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap mt-1">
                   {moods.map((mood) => {
                     const isActive = activeMood.youtubeId === mood.youtubeId;
                     return (
@@ -541,9 +592,9 @@ const StudySpace = () => {
                         }`}
                         style={isActive ? { backgroundColor: mood.accent + '30', borderColor: mood.accent } : {}}
                       >
-                        <span>{mood.emoji}</span>
+                        <span>{getMoodIcon(mood.iconName, "w-4 h-4")}</span>
                         <span>{mood.title}</span>
-                        {isActive && isPlaying && <span className="text-[8px] animate-pulse">▶</span>}
+                        {isActive && isPlaying && <PlayIcon className="w-2 h-2 animate-pulse" />}
                       </button>
                     );
                   })}
@@ -552,24 +603,55 @@ const StudySpace = () => {
             </div>
 
             {/* AI Study Planner */}
-            <AIStudyPlanner />
+            <div className="relative group">
+              <AIStudyPlanner />
+              {isGuest && (
+                <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px] z-10 flex items-center justify-center p-4">
+                  <div className="bg-surface border-4 border-on-surface p-6 rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] text-center space-y-4 transform group-hover:scale-105 transition-transform">
+                    <div className="w-12 h-12 bg-primary-container rounded-full flex items-center justify-center mx-auto border-2 border-on-surface">
+                      <Icon name="lock" className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h4 className="font-headline-md text-on-surface">Fitur Terkunci</h4>
+                      <p className="text-xs font-bold text-on-surface-variant mt-1">Masuk untuk membuat rencana belajar AI yang dipersonalisasi.</p>
+                    </div>
+                    <button 
+                      onClick={() => navigate('/login')}
+                      className="w-full py-2 bg-primary text-white font-black rounded-lg border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1 transition-all"
+                    >
+                      Masuk Sekarang
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Pomodoro + Daily Quiz */}
             <div className="flex flex-col gap-6">
               <PomodoroTimer />
-              <div className="bg-primary-container border-2 border-on-surface rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6 flex flex-col gap-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-headline-md text-on-primary-container">Daily Quiz</h3>
-                  <Icon name="lightbulb" className="w-5 h-5 text-on-primary-container" />
+              <div className="relative group">
+                <div className="bg-primary-container border-2 border-on-surface rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6 flex flex-col gap-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-headline-md text-on-primary-container">Daily Quiz</h3>
+                    <Icon name="lightbulb" className="w-5 h-5 text-on-primary-container" />
+                  </div>
+                  <p className="font-body-md text-on-primary-fixed-variant text-sm">Test your knowledge and earn a streak!</p>
+                  <button
+                    onClick={() => navigate('/challenge')}
+                    disabled={isGuest}
+                    className={`w-full py-3 bg-surface-container-lowest text-on-surface font-label-bold rounded-lg border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2 ${isGuest ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <span>Start Challenge</span>
+                    <Icon name="arrow_forward" className="w-5 h-5" />
+                  </button>
                 </div>
-                <p className="font-body-md text-on-primary-fixed-variant text-sm">Test your knowledge and earn a streak!</p>
-                <button
-                  onClick={() => navigate('/challenge')}
-                  className="w-full py-3 bg-surface-container-lowest text-on-surface font-label-bold rounded-lg border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2"
-                >
-                  <span>Start Challenge</span>
-                  <Icon name="arrow_forward" className="w-5 h-5" />
-                </button>
+                {isGuest && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-surface/90 border-2 border-on-surface px-3 py-1 rounded-full shadow-md">
+                      <p className="text-[10px] font-black uppercase text-on-surface">Login Required</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -581,7 +663,7 @@ const StudySpace = () => {
               <span className="text-xs font-black text-on-surface-variant opacity-60 uppercase tracking-wider">Klik untuk putar</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {MOODS.map((mood) => {
+              {moods.map((mood) => {
                 const isActive = activeMood.youtubeId === mood.youtubeId;
                 return (
                   <button
@@ -601,15 +683,15 @@ const StudySpace = () => {
                     >
                       {/* Dark overlay */}
                       <div className="absolute inset-0 bg-black/30" />
-                      {/* Emoji centered */}
-                      <span className="absolute inset-0 flex items-center justify-center text-3xl drop-shadow">{mood.emoji}</span>
+                      {/* Icon centered */}
+                      <span className="absolute inset-0 flex items-center justify-center drop-shadow">{getMoodIcon(mood.iconName, "w-10 h-10 text-white")}</span>
                       {/* Active badge */}
                       {isActive && (
                         <div
                           className="absolute top-2 right-2 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-white/50"
                           style={{ backgroundColor: mood.accent }}
                         >
-                          <span className="animate-pulse">▶</span>
+                          <PlayIcon className="w-4 h-4 animate-pulse" />
                         </div>
                       )}
                     </div>
@@ -639,6 +721,49 @@ const StudySpace = () => {
                 );
               })}
             </div>
+
+            {/* ── Recent Custom Streams ─────────────────────────── */}
+            {customPlaylists && customPlaylists.length > 0 && (
+              <div className="flex flex-col gap-4 mt-4 animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-headline-md text-on-surface">Recent Custom Streams</h2>
+                  <span className="text-[10px] font-black text-on-surface-variant opacity-60 uppercase tracking-wider">Tersimpan otomatis</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {customPlaylists.map((mood) => {
+                    const isActive = activeMood.youtubeId === mood.youtubeId;
+                    return (
+                      <button
+                        key={mood.youtubeId}
+                        onClick={() => handleMoodClick(mood)}
+                        className={`relative overflow-hidden border-2 rounded-xl text-left transition-all duration-200 ${
+                          isActive
+                            ? 'shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-1'
+                            : 'border-on-surface shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-0.5 hover:-translate-y-1 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]'
+                        }`}
+                        style={{ borderColor: isActive ? mood.accent : undefined }}
+                      >
+                        <div
+                          className="h-20 bg-cover bg-center border-b-2 border-on-surface relative"
+                          style={{ backgroundImage: `url("${mood.img}")` }}
+                        >
+                          <div className="absolute inset-0 bg-black/40" />
+                          <span className="absolute inset-0 flex items-center justify-center text-white/80"><MusicIcon className="w-8 h-8" /></span>
+                          {isActive && (
+                            <div className="absolute top-2 right-2 p-1 rounded bg-pink-500 border border-white/50">
+                              <PlayIcon className="w-3 h-3 text-white animate-pulse" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-2 bg-white" style={isActive ? { backgroundColor: mood.accent + '15' } : {}}>
+                          <p className="font-label-bold text-[11px] text-on-surface truncate">{mood.title}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
         </div>

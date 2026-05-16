@@ -4,6 +4,7 @@ import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { showToast, friendlyError } from '../lib/toast';
+import { BulbIcon } from '../components/Icons';
 
 const TeacherCreateCourse = () => {
   const navigate = useNavigate();
@@ -85,7 +86,7 @@ const TeacherCreateCourse = () => {
         link_to: '/catalog'
       });
 
-      showToast('Kursus berhasil diterbitkan! 🎉');
+      showToast('Kursus berhasil diterbitkan!');
       navigate('/teacher/courses');
     } catch (error) {
       showToast(friendlyError(error), 'error');
@@ -283,7 +284,7 @@ const TeacherCreateCourse = () => {
 
               <div className="p-6 bg-secondary-container/20 rounded-2xl border-2 border-on-surface">
                  <p className="text-xs font-bold text-on-surface leading-relaxed">
-                   <span className="font-black">💡 Tips:</span> Gunakan gambar yang menarik untuk meningkatkan minat calon siswa hingga 40%.
+                   <span className="font-black flex items-center gap-1 mb-1"><BulbIcon className="w-4 h-4 text-primary" /> Tips:</span> Gunakan gambar yang menarik untuk meningkatkan minat calon siswa hingga 40%.
                  </p>
               </div>
             </section>

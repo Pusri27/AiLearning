@@ -7,8 +7,12 @@ import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { checkAchievements } from '../lib/achievementService';
 
+import { useUserProfile } from '../context/UserProfileContext';
+
 const Achievements = () => {
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
+  const isGuest = profile.isGuest;
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ certificates: 0, badges: 0 });
   const [certificates, setCertificates] = useState([]);
@@ -17,55 +21,69 @@ const Achievements = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/login'); return; }
+      
+      if (!session && !isGuest) {
+        navigate('/login');
+        return;
+      }
 
-      // Cek lencana baru otomatis
-      await checkAchievements(session.user.id);
+      if (session) {
+        // Cek lencana baru otomatis
+        await checkAchievements(session.user.id);
 
-      const uid = session.user.id;
+        const uid = session.user.id;
 
-      // Parallel Fetch
-      const [enrollRes, earnedAchRes, allAchRes] = await Promise.all([
-        // 1. Get completed courses for Certificates
-        supabase
-          .from('enrollments')
-          .select('id, enrolled_at, courses(title, category, image_url)')
-          .eq('user_id', uid)
-          .eq('progress', 100),
-        
-        // 2. Get earned badges
-        supabase
-          .from('user_achievements')
-          .select('achievement_id')
-          .eq('user_id', uid),
+        // Parallel Fetch
+        const [enrollRes, earnedAchRes, allAchRes] = await Promise.all([
+          // 1. Get completed courses for Certificates
+          supabase
+            .from('enrollments')
+            .select('id, enrolled_at, courses(title, category, image_url)')
+            .eq('user_id', uid)
+            .eq('progress', 100),
+          
+          // 2. Get earned badges
+          supabase
+            .from('user_achievements')
+            .select('achievement_id')
+            .eq('user_id', uid),
 
-        // 3. Get all master achievements
-        supabase
-          .from('achievements')
-          .select('*')
-      ]);
+          // 3. Get all master achievements
+          supabase
+            .from('achievements')
+            .select('*')
+        ]);
 
-      const completedCourses = enrollRes.data || [];
-      const earnedIds = earnedAchRes.data?.map(a => a.achievement_id) || [];
-      const allBadges = allAchRes.data || [];
+        const completedCourses = enrollRes.data || [];
+        const earnedIds = earnedAchRes.data?.map(a => a.achievement_id) || [];
+        const allBadges = allAchRes.data || [];
 
-      // Categorize Badges
-      const earned = allBadges.filter(b => earnedIds.includes(b.id));
-      const locked = allBadges.filter(b => !earnedIds.includes(b.id));
+        // Categorize Badges
+        const earned = allBadges.filter(b => earnedIds.includes(b.id));
+        const locked = allBadges.filter(b => !earnedIds.includes(b.id));
 
-      setCertificates(completedCourses);
-      setEarnedBadges(earned);
-      setLockedBadges(locked);
-      setStats({
-        certificates: completedCourses.length,
-        badges: earned.length
-      });
+        setCertificates(completedCourses);
+        setEarnedBadges(earned);
+        setLockedBadges(locked);
+        setStats({
+          certificates: completedCourses.length,
+          badges: earned.length
+        });
+      } else {
+        // Guest mode: fetch only public achievements as locked
+        const { data: allBadges } = await supabase.from('achievements').select('*');
+        setCertificates([]);
+        setEarnedBadges([]);
+        setLockedBadges(allBadges || []);
+        setStats({ certificates: 0, badges: 0 });
+      }
       setLoading(false);
     };
 
     fetchData();
-  }, [navigate]);
+  }, [navigate, isGuest]);
 
   const formatDate = (d) => 
     new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
