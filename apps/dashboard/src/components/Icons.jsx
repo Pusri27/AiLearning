@@ -124,6 +124,19 @@ export const WaveIcon = (props) => (
   </IconBase>
 );
 
+export const HaiIcon = (props) => (
+  <IconBase {...props}>
+    {/* Waving hand */}
+    <path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v5" />
+    <path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v6" />
+    <path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v4.5" />
+    <path d="M18 8a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-1c0 0-1 4-4 4s-4-4-4-4h-1a2 2 0 0 1-2-2v0a2 2 0 0 1 2-2" />
+    {/* Dynamic Greeting/Waving Lines */}
+    <path d="M22 2a4 4 0 0 1 0 6" />
+    <path d="M24 0a6 6 0 0 1 0 10" />
+  </IconBase>
+);
+
 export const BulbIcon = (props) => (
   <IconBase {...props}>
     <path d="M15 21H9" />

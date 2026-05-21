@@ -37,6 +37,35 @@ const CourseDetail = () => {
     return `${videoCount * 0.5} Hours`; // Estimate 30 mins per video
   };
 
+  const [enrollmentProgress, setEnrollmentProgress] = useState(0);
+  const [enrollmentId, setEnrollmentId] = useState(null);
+  const [lessons, setLessons] = useState([]);
+
+  const curriculumRef = React.useRef(null);
+
+  const initializeLessonsList = (progressVal) => {
+    const defaultLessons = [
+      { id: 1, title: 'Modul 1: Fondasi Utama & Pengantar Materi', duration: '30 mins', type: 'video', icon: 'play_circle', content: 'Selamat datang! Di modul pertama ini kita akan mempelajari konsep inti, sejarah singkat, serta peta jalan (roadmap) pembelajaran kita ke depan.' },
+      { id: 2, title: 'Modul 2: Pemahaman Konsep Mendalam & Arsitektur Sistem', duration: '45 mins', type: 'reading', icon: 'menu_book', content: 'Di modul kedua ini, kita akan menyelami arsitektur mendalam serta bagaimana bagian-bagian sistem saling berkomunikasi satu sama lain untuk efisiensi tinggi.' },
+      { id: 3, title: 'Modul 3: Praktik Hands-On & Studi Kasus Industri', duration: '60 mins', type: 'interactive', icon: 'psychology', content: 'Waktunya praktik! Kita akan langsung membangun studi kasus nyata berskala industri untuk memecahkan permasalahan performa dan kehandalan.' },
+      { id: 4, title: 'Modul 4: Optimasi Tingkat Lanjut & Best Practices', duration: '45 mins', type: 'reading', icon: 'menu_book', content: 'Langkah terakhir sebelum produksi! Pelajari rahasia optimasi, pemantauan error, pembersihan kode, dan tips-tips efisiensi dari pakar berpengalaman.' },
+    ];
+
+    const completedCount = Math.round((progressVal / 100) * defaultLessons.length);
+    const mapped = defaultLessons.map((l, idx) => ({
+      ...l,
+      completed: idx < completedCount
+    }));
+    setLessons(mapped);
+  };
+
+  const handleContinueLearning = () => {
+    const nextLesson = lessons.find(l => !l.completed) || lessons[0];
+    if (nextLesson) {
+      navigate(`/courses/${id}/learn/${nextLesson.id}`);
+    }
+  };
+
   useEffect(() => {
     fetchCourse();
     if (isGuest) {
@@ -54,28 +83,52 @@ const CourseDetail = () => {
       .eq('id', id)
       .single();
 
+    let courseDataFinal = courseData;
     if (courseError) {
       console.error('Error fetching course:', courseError);
-    } else {
-      // 2. Fetch Instructor Data Separately
-      let { data: instructorData } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url')
-        .eq('id', courseData.instructor_id)
-        .maybeSingle();
+      if (id === 'ai-engineering') {
+         courseDataFinal = {
+           id: 'ai-engineering',
+           title: 'Master AI Engineering',
+           category: 'Computer Science',
+           level: 'Intermediate',
+           price: 1499000,
+           duration: '20 Hours',
+           students: '15k+',
+           rating: 4.9,
+           reviews: '2.5k',
+           instructor: 'Sarah Jenkins',
+           instructor_role: 'Lead AI Researcher',
+           description: 'Dive deep into the world of Artificial Intelligence with our comprehensive Master AI Engineering course.',
+           image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD2LJJfpnZ2ROq0HbtyCrNvo4BVBAh4r5sRDo-mlasd95Wf3RUzaqJgje2skV5ndpuzcVtDXKFzYMzI4Lvxp-w7cWq91U3d45el4GB9Vh09nN5738gWVXErwllHea4CIaJ5k_rCZuBJatHzw_HC5Bd13-FNswv88zxUnJ8KlU7oPFpI1AFpLXMqNFIt4spmT_YeIyVDwlbOAkesLsK2ejYpe_G2c2km9b_93iqzlr1AvKQjGg4CVlb1QA4XVMIH4Z-8TvQHYXhw4ZI'
+         };
+      }
+    }
 
-      if (!instructorData && courseData.instructor) {
+    if (courseDataFinal) {
+      // 2. Fetch Instructor Data Separately
+      let instructorData = null;
+      if (courseDataFinal.instructor_id) {
+        const { data: instData } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', courseDataFinal.instructor_id)
+          .maybeSingle();
+        instructorData = instData;
+      }
+
+      if (!instructorData && courseDataFinal.instructor) {
         const { data: fallbackData } = await supabase
           .from('profiles')
           .select('full_name, avatar_url')
-          .ilike('full_name', courseData.instructor)
+          .ilike('full_name', courseDataFinal.instructor)
           .limit(1)
           .maybeSingle();
         if (fallbackData) instructorData = fallbackData;
       }
       
       // Combine them manually
-      setCourse({ ...courseData, profiles: instructorData });
+      setCourse({ ...courseDataFinal, profiles: instructorData });
       
       // 3. Fetch Syllabus
       const { data: syllabusData } = await supabase
@@ -104,21 +157,23 @@ const CourseDetail = () => {
       }
 
       // 4. Fetch Instructor Stats
-      const { data: instructorCourses } = await supabase
-        .from('courses')
-        .select('id')
-        .eq('instructor_id', courseData.instructor_id);
-      
-      const instructorCourseIds = instructorCourses?.map(c => c.id) || [];
-      const { count: totalStudents } = await supabase
-        .from('enrollments')
-        .select('*', { count: 'exact', head: true })
-        .in('course_id', instructorCourseIds);
+      if (courseDataFinal.instructor_id) {
+        const { data: instructorCourses } = await supabase
+          .from('courses')
+          .select('id')
+          .eq('instructor_id', courseDataFinal.instructor_id);
+        
+        const instructorCourseIds = instructorCourses?.map(c => c.id) || [];
+        const { count: totalStudents } = await supabase
+          .from('enrollments')
+          .select('*', { count: 'exact', head: true })
+          .in('course_id', instructorCourseIds);
 
-      setInstructorStats({
-        courses: instructorCourseIds.length,
-        students: totalStudents || 0
-      });
+        setInstructorStats({
+          courses: instructorCourseIds.length,
+          students: totalStudents || 0
+        });
+      }
 
       // 4b. Fetch Accepted Collaborators Safely
       const { data: collabData } = await supabase
@@ -149,11 +204,16 @@ const CourseDetail = () => {
       if (session) {
         const { data: enrollment } = await supabase
           .from('enrollments')
-          .select('id')
+          .select('id, progress')
           .eq('user_id', session.user.id)
           .eq('course_id', id)
           .maybeSingle();
-        if (enrollment) setIsEnrolled(true);
+        if (enrollment) {
+          setIsEnrolled(true);
+          setEnrollmentId(enrollment.id);
+          setEnrollmentProgress(enrollment.progress || 0);
+          initializeLessonsList(enrollment.progress || 0);
+        }
       }
     }
     setLoading(false);
@@ -264,7 +324,7 @@ const CourseDetail = () => {
               <div className="flex flex-col sm:flex-row gap-4 mt-auto">
                 {isEnrolled ? (
                   <button 
-                    onClick={() => navigate(`/courses/${course.id}/learn`)}
+                    onClick={handleContinueLearning}
                     className="px-8 py-4 bg-primary text-white rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1"
                   >
                     Lanjutkan Belajar
@@ -321,6 +381,63 @@ const CourseDetail = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
             <div className="lg:col-span-2 space-y-8">
+              {isEnrolled && (
+                <section 
+                  ref={curriculumRef} 
+                  className="bg-surface rounded-xl border-2 border-on-background p-6 md:p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                >
+                  <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-on-background">
+                    <div>
+                      <h2 className="font-headline-lg text-headline-lg">Materi & Modul Belajar</h2>
+                      <p className="text-sm text-on-surface-variant mt-1">Selesaikan seluruh modul untuk meningkatkan progress belajarmu.</p>
+                    </div>
+                    <div className="bg-primary-container border-2 border-on-background px-4 py-2 rounded-lg text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <p className="text-xs font-bold text-on-primary-container-variant">Progres Kamu</p>
+                      <p className="font-headline-md font-black text-xl text-primary">{enrollmentProgress}%</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {lessons.map((lesson) => (
+                      <div 
+                        key={lesson.id}
+                        onClick={() => navigate(`/courses/${id}/learn/${lesson.id}`)}
+                        className={`group border-2 border-on-background p-4 rounded-xl flex items-center justify-between gap-4 cursor-pointer hover:bg-primary-container/20 transition-all ${lesson.completed ? 'bg-surface-container-low opacity-80' : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-lg border-2 border-on-background flex items-center justify-center ${lesson.completed ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-surface-container text-on-surface'}`}>
+                            <Icon name={lesson.completed ? 'check' : lesson.icon} className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="font-label-bold text-on-surface group-hover:text-primary transition-colors">{lesson.title}</h4>
+                            <p className="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+                              <Icon name="schedule" className="w-3.5 h-3.5" /> {lesson.duration}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {lesson.completed ? (
+                            <span className="text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-600/30 flex items-center gap-1">
+                              Selesai
+                            </span>
+                          ) : (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/courses/${id}/learn/${lesson.id}`);
+                              }}
+                              className="px-4 py-1.5 bg-primary text-white text-xs font-label-bold rounded-lg border-2 border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-[-1px] group-hover:translate-y-[-1px] group-hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all"
+                            >
+                              Mulai
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section className="bg-surface rounded-xl border-2 border-on-background p-6 md:p-8 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)]">
                 <h2 className="font-headline-lg text-headline-lg mb-4 pb-4 border-b-2 border-on-background">Tentang Kursus Ini</h2>
                 <div className="space-y-4 text-body-md font-body-md text-on-surface-variant">
@@ -455,6 +572,7 @@ const CourseDetail = () => {
            </div>
         </div>
       )}
+
     </div>
   );
 };

@@ -109,7 +109,7 @@ const BlogFeed = () => {
     { value: 'newest',  label: 'Terbaru',     icon: 'schedule' },
     { value: 'oldest',  label: 'Terlama',     icon: 'history'  },
     { value: 'popular', label: 'Terpopuler',  icon: 'trending_up' },
-    { value: 'az',      label: 'A–Z',         icon: 'sort_by_alpha' },
+    { value: 'az',      label: 'A-Z',         icon: 'sort_by_alpha' },
   ];
 
   return (
@@ -188,30 +188,35 @@ const BlogFeed = () => {
                   <p className="font-body-lg text-on-surface-variant line-clamp-3">
                     {featuredPost.content}
                   </p>
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-primary-container border border-on-surface overflow-hidden flex items-center justify-center">
-                        {featuredPost.author?.avatar_url ? (
-                          <img src={featuredPost.author.avatar_url} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[10px] font-black">{featuredPost.author?.full_name?.[0] || 'A'}</span>
-                        )}
+                  <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
+                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-primary-container border border-on-surface overflow-hidden flex items-center justify-center">
+                          {featuredPost.author?.avatar_url ? (
+                            <img src={featuredPost.author.avatar_url} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[10px] font-black">{featuredPost.author?.full_name?.[0] || 'A'}</span>
+                          )}
+                        </div>
+                        <span className="text-xs font-black text-on-surface">{featuredPost.author?.full_name || 'Penulis Harin'}</span>
                       </div>
-                      <span className="text-xs font-black text-on-surface">{featuredPost.author?.full_name || 'Penulis Harin'}</span>
-                    </div>
-                    <span className="text-on-surface-variant/30 hidden md:block">•</span>
-                    <span className="text-xs font-bold text-on-surface-variant">
-                      {formatDate(featuredPost.created_at)}
-                      {featuredPost.updated_at && featuredPost.updated_at !== featuredPost.created_at && (
-                        <span className="italic opacity-70 ml-1">(Diedit)</span>
-                      )}
-                    </span>
-                    {featuredPost.views > 0 && (
-                      <span className="flex items-center gap-1 text-xs font-bold text-on-surface-variant">
-                        <Icon name="visibility" className="w-3.5 h-3.5" />
-                        {featuredPost.views.toLocaleString('id-ID')} views
+                      <span className="text-on-surface-variant/30 hidden md:block">•</span>
+                      <span className="text-xs font-bold text-on-surface-variant">
+                        {formatDate(featuredPost.created_at)}
+                        {featuredPost.updated_at && featuredPost.updated_at !== featuredPost.created_at && (
+                          <span className="italic opacity-70 ml-1">(Diedit)</span>
+                        )}
                       </span>
-                    )}
+                      {featuredPost.views > 0 && (
+                        <>
+                          <span className="text-on-surface-variant/30 hidden md:block">•</span>
+                          <span className="flex items-center gap-1 text-xs font-bold text-on-surface-variant">
+                            <Icon name="visibility" className="w-3.5 h-3.5 shrink-0" />
+                            <span>{featuredPost.views.toLocaleString('id-ID')} views</span>
+                          </span>
+                        </>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1 text-primary font-label-bold text-sm group-hover:gap-2 transition-all">
                       <span>Baca Selengkapnya</span>
                       <Icon name="arrow_forward" className="w-4 h-4" />
@@ -359,7 +364,7 @@ const BlogFeed = () => {
                         </span>
                       </div>
                       <div className="p-5 flex flex-col gap-2 flex-grow">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <div className="flex items-center gap-2">
                             <div className="w-5 h-5 rounded-full bg-secondary-container border border-on-surface overflow-hidden flex items-center justify-center">
                               {post.author?.avatar_url ? (
@@ -370,21 +375,28 @@ const BlogFeed = () => {
                             </div>
                             <span className="text-[10px] font-black text-on-surface line-clamp-1">{post.author?.full_name || 'Penulis Harin'}</span>
                           </div>
-                          <p className="text-[10px] text-on-surface-variant font-bold">
-                            {formatDate(post.created_at)}
-                            {post.updated_at && post.updated_at !== post.created_at && (
-                              <span className="italic opacity-70 ml-1">(Diedit)</span>
-                            )}
-                          </p>
-                        </div>
-                          {post.views > 0 && (
-                            <span className="flex items-center gap-1 text-[11px] text-on-surface-variant font-bold">
-                              <Icon name="visibility" className="w-3 h-3" />
-                              {post.views >= 1000
-                                ? `${(post.views / 1000).toFixed(1)}k`
-                                : post.views}
+                          <div className="flex items-center gap-2 text-[10px] text-on-surface-variant font-bold">
+                            <span>
+                              {formatDate(post.created_at)}
+                              {post.updated_at && post.updated_at !== post.created_at && (
+                                <span className="italic opacity-70 ml-1">(Diedit)</span>
+                              )}
                             </span>
-                          )}
+                            {post.views > 0 && (
+                              <>
+                                <span>•</span>
+                                <span className="flex items-center gap-0.5">
+                                  <Icon name="visibility" className="w-3.5 h-3.5 shrink-0" />
+                                  <span>
+                                    {post.views >= 1000
+                                      ? `${(post.views / 1000).toFixed(1)}k`
+                                      : post.views}
+                                  </span>
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                         <h3 className="font-headline-md text-on-background leading-tight line-clamp-2 font-black">
                           {post.title}
                         </h3>

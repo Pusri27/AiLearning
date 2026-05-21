@@ -8,6 +8,7 @@ import BlogPost from './pages/BlogPost';
 import WritePost from './pages/WritePost';
 import MyCourses from './pages/MyCourses';
 import CourseDetail from './pages/CourseDetail';
+import CourseLesson from './pages/CourseLesson';
 import Catalog from './pages/Catalog';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
@@ -32,6 +33,18 @@ import AIAssistant from './components/AIAssistant';
 import { MusicPlayerProvider } from './context/MusicPlayerContext';
 import PersistentMusicPlayer from './components/PersistentMusicPlayer';
 import { useUserProfile } from './context/UserProfileContext';
+import { useLocation } from 'react-router-dom';
+
+const AIAssistantWrapper = ({ session, isGuest, profile }) => {
+  const location = useLocation();
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
+  const isCommunityPage = location.pathname === '/community';
+
+  if ((session || isGuest) && !isAuthPage && !isCommunityPage) {
+    return <AIAssistant userRole={profile.role} userName={profile.fullName} />;
+  }
+  return null;
+};
 
 // ── Centralized ProtectedRoute ────────────────────────────────────────────────
 // Listens to onAuthStateChange at App level — when Supabase fires SIGNED_OUT,
@@ -91,6 +104,7 @@ function AppContent() {
         <Route path="/"                         element={P(<Dashboard />)} />
         <Route path="/courses"                  element={P(<MyCourses />)} />
         <Route path="/courses/:id"              element={P(<CourseDetail />)} />
+        <Route path="/courses/:courseId/learn/:lessonId" element={P(<CourseLesson />)} />
         <Route path="/courses/:id/learn"        element={P(<CourseLearn />)} />
         <Route path="/write"                    element={P(<WritePost />)} />
         <Route path="/edit-post/:id"            element={P(<WritePost />)} />
@@ -121,11 +135,7 @@ function AppContent() {
         <Route path="/signup"   element={<SignUp />} />
       </Routes>
 
-      {/* AI Assistant — only shown when logged in and not on auth pages */}
-      {(session || isGuest) && !isAuthPage && (
-        <AIAssistant userRole={profile.role} userName={profile.fullName} />
-      )}
-
+      <AIAssistantWrapper session={session} isGuest={isGuest} profile={profile} />
       <PersistentMusicPlayer />
     </>
   );

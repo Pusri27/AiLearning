@@ -17,6 +17,7 @@ const NotificationDropdown = () => {
     if (!session) return;
     
     const uid = session.user.id;
+    const userCreatedAt = session.user.created_at;
 
     // Fetch notifications and check if they are in notification_reads
     let query = supabase
@@ -32,6 +33,7 @@ const NotificationDropdown = () => {
     }
 
     const { data: notifs, error } = await query
+      .gte('created_at', userCreatedAt)
       .order('created_at', { ascending: false })
       .limit(10);
 

@@ -98,8 +98,94 @@ export const UserProfileProvider = ({ children }) => {
     setProfile(prev => ({ ...prev, ...updates }));
   };
 
+  const [unreadCommunityCount, setUnreadCommunityCount] = useState(0);
+
+  const fetchGlobalUnreadCount = async (userId) => {
+    if (!userId) return;
+    try {
+      const { data: memberships } = await supabase
+        .from('community_members')
+        .select('community_id')
+        .eq('user_id', userId);
+        
+      if (!memberships || memberships.length === 0) {
+        setUnreadCommunityCount(0);
+        return;
+      }
+      
+      const communityIds = memberships.map(m => m.community_id);
+      
+      const { data: channels } = await supabase
+        .from('channels')
+        .select('id')
+        .in('community_id', communityIds)
+        .neq('type', 'voice');
+        
+      if (!channels || channels.length === 0) {
+        setUnreadCommunityCount(0);
+        return;
+      }
+      
+      const channelIds = channels.map(c => c.id);
+      
+      let totalUnread = 0;
+      for (const channelId of channelIds) {
+        const lastRead = localStorage.getItem(`last_read_channel:${channelId}`) || '1970-01-01T00:00:00.000Z';
+        
+        const { count, error } = await supabase
+          .from('community_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('channel_id', channelId)
+          .gt('created_at', lastRead)
+          .neq('user_id', userId);
+          
+        if (!error && count) {
+          totalUnread += count;
+        }
+      }
+      setUnreadCommunityCount(totalUnread);
+    } catch (err) {
+      console.error('Error fetching global unread count:', err);
+    }
+  };
+
+  const recalculateUnread = () => {
+    if (profile?.id) {
+      fetchGlobalUnreadCount(profile.id);
+    }
+  };
+
+  useEffect(() => {
+    if (!profile?.id) {
+      setUnreadCommunityCount(0);
+      return;
+    }
+
+    fetchGlobalUnreadCount(profile.id);
+
+    // Subscribe to all insertions on community_messages to update unread badge
+    const globalMsgChannel = supabase
+      .channel('global_sidebar_notifications')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'community_messages'
+      }, (payload) => {
+        const newMsg = payload.new;
+        if (!newMsg || newMsg.user_id === profile.id) return;
+        
+        // Simply trigger recalculation to ensure consistency and correctness
+        fetchGlobalUnreadCount(profile.id);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(globalMsgChannel);
+    };
+  }, [profile?.id]);
+
   return (
-    <UserProfileContext.Provider value={{ profile, updateProfile, loadProfile, loginAsGuest, logout }}>
+    <UserProfileContext.Provider value={{ profile, updateProfile, loadProfile, loginAsGuest, logout, unreadCommunityCount, recalculateUnread }}>
       {children}
     </UserProfileContext.Provider>
   );

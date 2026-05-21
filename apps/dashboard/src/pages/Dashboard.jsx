@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabaseClient';
 import { showToast } from '../lib/toast';
 
 import { useUserProfile } from '../context/UserProfileContext';
-import { WaveIcon, CheckIcon } from '../components/Icons';
+import { HaiIcon, CheckIcon } from '../components/Icons';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -124,7 +124,7 @@ const Dashboard = () => {
           <section className="mb-8 relative overflow-hidden bg-primary-container border-2 border-on-surface p-8 md:p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row justify-between items-center gap-6 rounded-xl">
             <div className="max-w-xl relative z-10">
               <h2 className="font-headline-xl font-black mb-3 text-on-surface">
-                Selamat Datang, {profile.fullName?.split(' ')[0] || 'Pelajar'}! <WaveIcon className="inline-block w-8 h-8 md:w-10 md:h-10 ml-2 text-on-surface" />
+                Selamat Datang, {profile.fullName?.split(' ')[0] || 'Pelajar'}! <HaiIcon className="inline-block w-8 h-8 md:w-10 md:h-10 ml-2 text-on-surface hover:scale-110 transition-transform cursor-pointer" />
               </h2>
               <p className="font-body-lg text-on-surface-variant mb-6">
                 {enrolledCourses.length > 0

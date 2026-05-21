@@ -70,6 +70,14 @@ alter table enrollments enable row level security;
 create policy "Users can view their own enrollments."
   on enrollments for select
   using ( auth.uid() = user_id );
+
+create policy "Users can update their own enrollments."
+  on enrollments for update
+  using ( auth.uid() = user_id );
+
+create policy "Users can insert their own enrollments."
+  on enrollments for insert
+  with check ( auth.uid() = user_id );
 ```
 
 ## 4. Wishlist Table

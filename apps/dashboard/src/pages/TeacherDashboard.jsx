@@ -5,7 +5,7 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
-import { WaveIcon } from '../components/Icons';
+import { HaiIcon, WaveIcon } from '../components/Icons';
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
