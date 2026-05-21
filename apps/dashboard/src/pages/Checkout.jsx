@@ -11,7 +11,8 @@ import { TadaIcon, HourglassIcon, LockIcon } from '../components/Icons';
 const Checkout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const selectedCartIds = location.state?.selectedCartIds || [];
+  const selectedCartIdsRaw = location.state?.selectedCartIds || [];
+  const selectedCartIdsStr = JSON.stringify(selectedCartIdsRaw);
   const directCourseId = location.state?.courseId;
 
   const [cartItems,      setCartItems]      = useState([]);
@@ -33,6 +34,8 @@ const Checkout = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate('/login'); return; }
       setUser(session.user);
+
+      const selectedCartIds = JSON.parse(selectedCartIdsStr);
 
       // Jika tidak ada item yang dipilih dan tidak ada directCourseId, kembalikan ke keranjang
       if (selectedCartIds.length === 0 && !directCourseId) {
@@ -87,7 +90,7 @@ const Checkout = () => {
       setLoading(false);
     };
     init();
-  }, [navigate, selectedCartIds, directCourseId]);
+  }, [navigate, selectedCartIdsStr, directCourseId]);
 
   const total = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
 
