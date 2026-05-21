@@ -526,7 +526,6 @@ Always respond in the same language as the user (typically Indonesian). Keep you
         } catch (err) {
           console.error('Error fetching messages:', err);
         }
-        }
       };
       fetchMessages();
 
