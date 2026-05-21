@@ -43,22 +43,6 @@ const CourseDetail = () => {
 
   const curriculumRef = React.useRef(null);
 
-  const initializeLessonsList = (progressVal) => {
-    const defaultLessons = [
-      { id: 1, title: 'Modul 1: Fondasi Utama & Pengantar Materi', duration: '30 mins', type: 'video', icon: 'play_circle', content: 'Selamat datang! Di modul pertama ini kita akan mempelajari konsep inti, sejarah singkat, serta peta jalan (roadmap) pembelajaran kita ke depan.' },
-      { id: 2, title: 'Modul 2: Pemahaman Konsep Mendalam & Arsitektur Sistem', duration: '45 mins', type: 'reading', icon: 'menu_book', content: 'Di modul kedua ini, kita akan menyelami arsitektur mendalam serta bagaimana bagian-bagian sistem saling berkomunikasi satu sama lain untuk efisiensi tinggi.' },
-      { id: 3, title: 'Modul 3: Praktik Hands-On & Studi Kasus Industri', duration: '60 mins', type: 'interactive', icon: 'psychology', content: 'Waktunya praktik! Kita akan langsung membangun studi kasus nyata berskala industri untuk memecahkan permasalahan performa dan kehandalan.' },
-      { id: 4, title: 'Modul 4: Optimasi Tingkat Lanjut & Best Practices', duration: '45 mins', type: 'reading', icon: 'menu_book', content: 'Langkah terakhir sebelum produksi! Pelajari rahasia optimasi, pemantauan error, pembersihan kode, dan tips-tips efisiensi dari pakar berpengalaman.' },
-    ];
-
-    const completedCount = Math.round((progressVal / 100) * defaultLessons.length);
-    const mapped = defaultLessons.map((l, idx) => ({
-      ...l,
-      completed: idx < completedCount
-    }));
-    setLessons(mapped);
-  };
-
   const handleContinueLearning = () => {
     const nextLesson = lessons.find(l => !l.completed) || lessons[0];
     if (nextLesson) {
@@ -83,52 +67,37 @@ const CourseDetail = () => {
       .eq('id', id)
       .single();
 
-    let courseDataFinal = courseData;
     if (courseError) {
       console.error('Error fetching course:', courseError);
-      if (id === 'ai-engineering') {
-         courseDataFinal = {
-           id: 'ai-engineering',
-           title: 'Master AI Engineering',
-           category: 'Computer Science',
-           level: 'Intermediate',
-           price: 1499000,
-           duration: '20 Hours',
-           students: '15k+',
-           rating: 4.9,
-           reviews: '2.5k',
-           instructor: 'Sarah Jenkins',
-           instructor_role: 'Lead AI Researcher',
-           description: 'Dive deep into the world of Artificial Intelligence with our comprehensive Master AI Engineering course.',
-           image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD2LJJfpnZ2ROq0HbtyCrNvo4BVBAh4r5sRDo-mlasd95Wf3RUzaqJgje2skV5ndpuzcVtDXKFzYMzI4Lvxp-w7cWq91U3d45el4GB9Vh09nN5738gWVXErwllHea4CIaJ5k_rCZuBJatHzw_HC5Bd13-FNswv88zxUnJ8KlU7oPFpI1AFpLXMqNFIt4spmT_YeIyVDwlbOAkesLsK2ejYpe_G2c2km9b_93iqzlr1AvKQjGg4CVlb1QA4XVMIH4Z-8TvQHYXhw4ZI'
-         };
-      }
+      showToast(friendlyError(courseError), 'error');
+      setLoading(false);
+      return;
     }
 
-    if (courseDataFinal) {
+    if (courseData) {
       // 2. Fetch Instructor Data Separately
       let instructorData = null;
-      if (courseDataFinal.instructor_id) {
+      if (courseData.instructor_id) {
         const { data: instData } = await supabase
           .from('profiles')
           .select('full_name, avatar_url')
-          .eq('id', courseDataFinal.instructor_id)
+          .eq('id', courseData.instructor_id)
           .maybeSingle();
         instructorData = instData;
       }
 
-      if (!instructorData && courseDataFinal.instructor) {
+      if (!instructorData && courseData.instructor) {
         const { data: fallbackData } = await supabase
           .from('profiles')
           .select('full_name, avatar_url')
-          .ilike('full_name', courseDataFinal.instructor)
+          .ilike('full_name', courseData.instructor)
           .limit(1)
           .maybeSingle();
         if (fallbackData) instructorData = fallbackData;
       }
       
       // Combine them manually
-      setCourse({ ...courseDataFinal, profiles: instructorData });
+      setCourse({ ...courseData, profiles: instructorData });
       
       // 3. Fetch Syllabus
       const { data: syllabusData } = await supabase
@@ -136,7 +105,8 @@ const CourseDetail = () => {
         .select('*')
         .eq('course_id', id)
         .order('sort_order', { ascending: true });
-      if (syllabusData) setSyllabus(syllabusData);
+      const syllabusList = syllabusData || [];
+      setSyllabus(syllabusList);
 
       // Fetch enrollment count (correct syntax)
       const { count: totalCount } = await supabase
@@ -157,11 +127,11 @@ const CourseDetail = () => {
       }
 
       // 4. Fetch Instructor Stats
-      if (courseDataFinal.instructor_id) {
+      if (courseData.instructor_id) {
         const { data: instructorCourses } = await supabase
           .from('courses')
           .select('id')
-          .eq('instructor_id', courseDataFinal.instructor_id);
+          .eq('instructor_id', courseData.instructor_id);
         
         const instructorCourseIds = instructorCourses?.map(c => c.id) || [];
         const { count: totalStudents } = await supabase
@@ -211,8 +181,50 @@ const CourseDetail = () => {
         if (enrollment) {
           setIsEnrolled(true);
           setEnrollmentId(enrollment.id);
-          setEnrollmentProgress(enrollment.progress || 0);
-          initializeLessonsList(enrollment.progress || 0);
+
+          // Fetch user progress for individual syllabus items
+          const { data: userProgress } = await supabase
+            .from('user_progress')
+            .select('syllabus_id')
+            .eq('user_id', session.user.id)
+            .eq('course_id', id);
+
+          const mappedLessons = syllabusList.map(item => {
+            const isCompleted = userProgress ? userProgress.some(p => p.syllabus_id === item.id) : false;
+            let type = 'reading';
+            let icon = 'menu_book';
+            if (item.type === 'assignment') {
+              type = 'assignment';
+              icon = 'assignment';
+            } else if (item.video_url) {
+              type = 'video';
+              icon = 'play_circle';
+            }
+
+            return {
+              id: item.id,
+              title: item.title,
+              duration: item.type === 'assignment' ? 'Penugasan' : '30 mins',
+              type: type,
+              icon: icon,
+              content: item.content || item.assignment_text || '',
+              completed: isCompleted
+            };
+          });
+
+          setLessons(mappedLessons);
+
+          const completedCount = mappedLessons.filter(l => l.completed).length;
+          const newProgress = mappedLessons.length > 0 ? Math.round((completedCount / mappedLessons.length) * 100) : 0;
+          setEnrollmentProgress(newProgress);
+
+          // Update enrollment progress in DB if it mismatched (e.g. syllabus items deleted/added by teacher)
+          if (newProgress !== enrollment.progress) {
+            await supabase
+              .from('enrollments')
+              .update({ progress: newProgress })
+              .eq('id', enrollment.id);
+          }
         }
       }
     }
