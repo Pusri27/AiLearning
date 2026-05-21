@@ -23,23 +23,24 @@ const MyCourses = () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (!session && !isGuest) {
-        navigate('/login');
-        return;
-      }
+      if (!session && !isGuest) return;
 
       if (session) {
-        const { data, error } = await supabase
+        const { data: enrollData, error } = await supabase
           .from('enrollments')
-          .select('id, progress, courses(*)')
+          .select('id, course_id, courses(*, course_syllabus(id))')
           .eq('user_id', session.user.id);
 
-        if (!error && data) {
-          const mapped = data.map(e => ({
-            enrollmentId: e.id,
-            progress: e.progress || 0,
-            ...e.courses,
-          }));
+        if (!error && enrollData) {
+          const { data: userProgress } = await supabase.from('user_progress').select('course_id, syllabus_id').eq('user_id', session.user.id);
+          const mapped = enrollData.map(e => {
+            const course = Array.isArray(e.courses) ? e.courses[0] : e.courses;
+            if (!course) return null;
+            const total = course.course_syllabus?.length || 0;
+            const done = userProgress?.filter(p => p.course_id === course.id).length || 0;
+            const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+            return { enrollmentId: e.id, progress, ...course };
+          }).filter(Boolean);
           setCourses(mapped);
           setStats({
             total: mapped.length,

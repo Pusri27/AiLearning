@@ -13,8 +13,8 @@ const ProfileDropdown = () => {
     ? profile.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
 
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    logout();
     navigate('/login');
   };
 

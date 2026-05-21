@@ -21,16 +21,10 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      
-      // If no session AND not a guest, redirect to login
-      if (!currentSession && !isGuest) {
-        navigate('/login');
-        return;
-      }
 
-      // Redirect teachers
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+      // Redirect teachers to their own dashboard
       if (profile.role === 'teacher') {
         navigate('/teacher/dashboard');
         return;
@@ -38,40 +32,47 @@ const Dashboard = () => {
 
       // Fetch enrolled courses (only if logged in)
       if (currentSession) {
-        console.log("Fetching enrollments for user:", currentSession.user.id);
-        
-        // Cobalah query yang paling dasar dulu untuk mengetes apakah tabelnya ada
         const { data: enrollData, error: enrollError } = await supabase
           .from('enrollments')
           .select(`
             id, 
-            progress,
             course_id,
             courses (
               id,
               title,
               image_url,
-              category
+              category,
+              course_syllabus (id)
             )
           `)
           .eq('user_id', currentSession.user.id);
 
         if (enrollError) {
-          console.error("Enrollment Fetch Error Full Object:", enrollError);
-          // Jika error 400, kemungkinan nama relasi bukan 'courses' tapi 'course'
+          console.error("Enrollment Fetch Error:", enrollError);
           showToast(`Error Database: ${enrollError.message}`, 'error');
         }
 
         if (enrollData) {
-          console.log("Raw Enroll Data Received:", enrollData);
+          // Fetch user progress for all courses at once
+          const { data: userProgress } = await supabase
+            .from('user_progress')
+            .select('course_id, syllabus_id')
+            .eq('user_id', currentSession.user.id);
+
           const mapped = enrollData
             .map(e => {
-              // Menangani kemungkinan relasi objek atau array
               const course = Array.isArray(e.courses) ? e.courses[0] : e.courses;
               if (!course) return null;
+
+              const totalSyllabus = course.course_syllabus?.length || 0;
+              const completedInCourse = userProgress?.filter(p => p.course_id === course.id).length || 0;
+              const progressPercent = totalSyllabus > 0 
+                ? Math.round((completedInCourse / totalSyllabus) * 100) 
+                : 0;
+
               return { 
                 enrollId: e.id, 
-                progress: e.progress || 0, 
+                progress: progressPercent, 
                 ...course 
               };
             })

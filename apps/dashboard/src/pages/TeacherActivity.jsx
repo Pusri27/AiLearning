@@ -17,10 +17,7 @@ const TeacherActivity = () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (!session) {
-        navigate('/login');
-        return;
-      }
+      if (!session) return;
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -35,7 +32,7 @@ const TeacherActivity = () => {
 
       setUser({ ...session.user, full_name: profile.full_name });
 
-      // Fetch Real Enrollments as Primary Activity
+      // Fetch Real Data
       const { data: teacherCourses } = await supabase
         .from('courses')
         .select('id, title')
@@ -44,63 +41,68 @@ const TeacherActivity = () => {
       const courseIds = teacherCourses?.map(c => c.id) || [];
       
       if (courseIds.length > 0) {
+        // 1. Fetch Enrollments (no join)
         const { data: enrollments } = await supabase
           .from('enrollments')
-          .select(`
-            id,
-            enrolled_at,
-            course:course_id (title),
-            profile:user_id (full_name, email)
-          `)
+          .select('id, user_id, course_id, enrolled_at')
           .in('course_id', courseIds)
-          .order('enrolled_at', { ascending: false });
+          .order('enrolled_at', { ascending: false })
+          .limit(15);
 
-        // Map real data to activity format
-        const realActivities = enrollments?.map(e => ({
-          id: e.id,
+        // 2. Fetch Submissions (no join)
+        const { data: submissions } = await supabase
+          .from('submissions')
+          .select('id, student_id, course_id, syllabus_id, file_url, submitted_at')
+          .in('course_id', courseIds)
+          .order('submitted_at', { ascending: false })
+          .limit(15);
+
+        // 3. Fetch Profiles separately for all involved users
+        const allUserIds = [
+          ...new Set([
+            ...(enrollments?.map(e => e.user_id) || []),
+            ...(submissions?.map(s => s.student_id) || [])
+          ])
+        ];
+
+        const { data: profiles } = allUserIds.length > 0 ? await supabase
+          .from('profiles')
+          .select('id, full_name, username')
+          .in('id', allUserIds) : { data: [] };
+
+        const getName = (id) => {
+          const p = profiles?.find(p => p.id === id);
+          return p?.full_name || p?.username || 'Student';
+        };
+
+        // Map Enrollments to activities
+        const enrollmentActivities = enrollments?.map(e => ({
+          id: `enroll-${e.id}`,
           type: 'Enrollment',
-          user: e.profile?.full_name,
-          target: e.course?.title,
-          time: new Date(e.enrolled_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          date: new Date(e.enrolled_at).toLocaleDateString('en-US', { weekday: 'long' }),
+          user: getName(e.user_id),
+          target: teacherCourses.find(c => String(c.id) === String(e.course_id))?.title || 'Kursus',
+          time: new Date(e.enrolled_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(e.enrolled_at).toLocaleDateString('id-ID', { weekday: 'long' }),
           timestamp: new Date(e.enrolled_at).getTime()
         })) || [];
 
-        // Add Mock activities for UI demonstration
-        const mockActivities = [
-          {
-            id: 'mock-1',
-            type: 'Submission',
-            user: 'Budi Santoso',
-            target: 'Module 1: Design Systems',
-            time: '09:15 AM',
-            date: 'Today',
-            file: 'Assignment_1_Final.fig',
-            timestamp: Date.now() - 3600000
-          },
-          {
-            id: 'mock-2',
-            type: 'Discussion',
-            user: 'Michael Chen',
-            target: 'Web Typography',
-            time: '08:30 AM',
-            date: 'Today',
-            content: "I'm having trouble deciding between geometric and humanist sans-serifs for the body text of my project.",
-            timestamp: Date.now() - 7200000
-          },
-          {
-            id: 'mock-3',
-            type: 'AI Tutor Note',
-            user: 'Harin AI',
-            target: 'Cohort A Progress',
-            time: '4:20 PM',
-            date: 'Yesterday',
-            content: "3 students in Cohort A have failed the 'CSS Grid Layout' quiz multiple times. Consider unlocking supplemental video materials.",
-            timestamp: Date.now() - 86400000
-          }
-        ];
+        // Map Submissions to activities
+        const submissionActivities = submissions?.map(s => ({
+          id: `sub-${s.id}`,
+          type: 'Submission',
+          user: getName(s.student_id),
+          target: teacherCourses.find(c => String(c.id) === String(s.course_id))?.title || 'Kursus',
+          time: new Date(s.submitted_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(s.submitted_at).toLocaleDateString('id-ID', { weekday: 'long' }),
+          file: s.file_url?.split('/').pop(),
+          file_url: s.file_url,
+          timestamp: new Date(s.submitted_at).getTime()
+        })) || [];
 
-        setActivities([...realActivities, ...mockActivities].sort((a, b) => b.timestamp - a.timestamp));
+        const allActivities = [...enrollmentActivities, ...submissionActivities]
+          .sort((a, b) => b.timestamp - a.timestamp);
+
+        setActivities(allActivities);
       }
 
       setLoading(false);
@@ -208,7 +210,14 @@ const TeacherActivity = () => {
                             <p className="text-[10px] font-black text-on-surface-variant uppercase">Submitted on time</p>
                           </div>
                         </div>
-                        <button className="text-sm font-black text-secondary underline hover:text-primary transition-colors">Grade Now</button>
+                        <a 
+                          href={activity.file_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-sm font-black text-secondary underline hover:text-primary transition-colors"
+                        >
+                          Lihat Tugas
+                        </a>
                       </div>
                     )}
 

@@ -505,21 +505,7 @@ const Settings = () => {
                 <h3 className="font-headline-lg text-headline-lg text-on-surface">Preferensi Belajar</h3>
                 <p className="font-body-md text-body-md text-on-surface-variant mt-2">Sesuaikan pengalaman belajar Anda agar lebih optimal.</p>
               </div>
-              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="bg-surface-container border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
-                  <div>
-                    <Icon name="schedule" className="w-10 h-10 text-secondary mb-4" />
-                    <h4 className="font-label-bold text-label-bold uppercase mb-2">Target Harian</h4>
-                    <p className="text-body-md text-on-surface-variant">Setel durasi waktu belajar minimum setiap hari.</p>
-                  </div>
-                  <div className="mt-6 flex items-center justify-between bg-white border-2 border-on-surface p-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <span className="font-bold px-2">{dailyGoal} Menit</span>
-                    <div className="flex gap-1">
-                      <button onClick={() => setDailyGoal(g => Math.max(5, g - 5))} className="w-8 h-8 bg-surface-variant border border-on-surface flex items-center justify-center font-black hover:bg-surface-container transition-colors">−</button>
-                      <button onClick={() => setDailyGoal(g => Math.min(480, g + 5))} className="w-8 h-8 bg-surface-variant border border-on-surface flex items-center justify-center font-black hover:bg-surface-container transition-colors">+</button>
-                    </div>
-                  </div>
-                </div>
+              <div className="md:col-span-2 grid grid-cols-1 gap-6 max-w-md">
                 <div className="bg-surface-container border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
                   <div>
                     <Icon name="forum" className="w-10 h-10 text-tertiary mb-4" />

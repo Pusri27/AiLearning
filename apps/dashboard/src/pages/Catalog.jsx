@@ -13,12 +13,29 @@ const Catalog = () => {
   const [category, setCategory] = useState('Semua');
   const [search,   setSearch]   = useState('');
   const [sortBy,   setSortBy]   = useState('newest');
+  const [ratingsMap, setRatingsMap] = useState({});
 
   useEffect(() => {
     const fetchCourses = async () => {
       setLoading(true);
       const { data, error } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
-      if (!error) setCourses(data || []);
+      if (!error && data) {
+        setCourses(data);
+        // Fetch ratings from course_ratings
+        const courseIds = data.map(c => c.id);
+        if (courseIds.length > 0) {
+          const { data: ratings } = await supabase
+            .from('course_ratings')
+            .select('course_id, rating')
+            .in('course_id', courseIds);
+          const rMap = {};
+          ratings?.forEach(r => {
+            if (!rMap[r.course_id]) rMap[r.course_id] = [];
+            rMap[r.course_id].push(r.rating);
+          });
+          setRatingsMap(rMap);
+        }
+      }
       setLoading(false);
     };
     fetchCourses();
@@ -176,7 +193,14 @@ const Catalog = () => {
                     <div className="mt-auto pt-4 border-t-2 border-on-surface/10 flex justify-between items-center">
                       <div className="flex items-center gap-1">
                         <Icon name="star" className="w-4 h-4 text-primary" />
-                        <span className="font-label-bold text-xs">4.9</span>
+                        <span className="font-label-bold text-xs">
+                          {ratingsMap[course.id]?.length > 0
+                            ? (ratingsMap[course.id].reduce((a, b) => a + b, 0) / ratingsMap[course.id].length).toFixed(1)
+                            : '—'}
+                        </span>
+                        {ratingsMap[course.id]?.length > 0 && (
+                          <span className="text-[10px] text-on-surface-variant font-bold">({ratingsMap[course.id].length})</span>
+                        )}
                       </div>
                       <span className="font-headline-md text-primary">{formatPrice(course.price)}</span>
                     </div>

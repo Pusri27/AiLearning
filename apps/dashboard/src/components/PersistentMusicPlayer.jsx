@@ -65,7 +65,9 @@ const PersistentMusicPlayer = () => {
       });
     };
 
-    initPlayer();
+    // Small delay so YT API fully registers origin before first postMessage
+    const timer = setTimeout(initPlayer, 100);
+    return () => clearTimeout(timer);
   }, [activeMood.youtubeId]);
 
   // 3. Control Play/Pause without reload

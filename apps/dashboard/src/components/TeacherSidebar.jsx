@@ -7,13 +7,12 @@ const TeacherSidebar = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      showToast('Gagal logout. Silakan coba lagi.', 'error');
-    } else {
-      navigate('/login');
-    }
+  const handleLogout = () => {
+    // Navigate instantly, fire signOut in background
+    navigate('/login');
+    supabase.auth.signOut().catch(() =>
+      showToast('Gagal logout. Silakan coba lagi.', 'error')
+    );
   };
 
   const menuItems = [

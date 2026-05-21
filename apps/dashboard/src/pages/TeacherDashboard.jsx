@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProfileDropdown from '../components/ProfileDropdown';
+import NotificationDropdown from '../components/NotificationDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
@@ -12,6 +13,9 @@ const TeacherDashboard = () => {
   const [courses, setCourses] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [ratingsMap, setRatingsMap] = useState({});
+  const [invitations, setInvitations] = useState([]);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,40 +41,143 @@ const TeacherDashboard = () => {
 
       setUser({ ...session.user, full_name: profile.full_name });
 
-      // Fetch Courses
-      const { data: teacherCourses } = await supabase
+      // Fetch owned courses
+      const { data: ownedCourses } = await supabase
         .from('courses')
         .select('*')
         .eq('instructor_id', session.user.id);
 
-      if (teacherCourses) setCourses(teacherCourses);
+      // Fetch collaborated courses
+      const { data: collaborations } = await supabase
+        .from('course_collaborators')
+        .select('course_id, courses(*)')
+        .eq('teacher_id', session.user.id)
+        .eq('status', 'accepted');
 
-      // Fetch Students (Enrollments)
+      const collabCourses = collaborations?.map(c => c.courses).filter(Boolean) || [];
+
+      const ownedFormatted = (ownedCourses || []).map(c => ({ ...c, isCollaboration: false }));
+      const collabFormatted = collabCourses.map(c => ({ ...c, isCollaboration: true }));
+
+      // Merge unique courses
+      const allCoursesMap = {};
+      ownedFormatted.forEach(c => { allCoursesMap[c.id] = c; });
+      collabFormatted.forEach(c => { allCoursesMap[c.id] = c; });
+      const teacherCourses = Object.values(allCoursesMap);
+
+      if (teacherCourses) {
+        setCourses(teacherCourses);
+        // Fetch real ratings
+        const cIds = teacherCourses.map(c => c.id);
+        if (cIds.length > 0) {
+          const { data: ratings } = await supabase
+            .from('course_ratings').select('course_id, rating').in('course_id', cIds);
+          const rMap = {};
+          ratings?.forEach(r => {
+            if (!rMap[r.course_id]) rMap[r.course_id] = [];
+            rMap[r.course_id].push(r.rating);
+          });
+          setRatingsMap(rMap);
+        }
+      }
+
+      // Fetch pending invitations
+      const { data: pendingInvites } = await supabase
+        .from('course_collaborators')
+        .select('id, course_id, invited_by, courses(title, image_url)')
+        .eq('teacher_id', session.user.id)
+        .eq('status', 'pending');
+
+      let invitesWithProfiles = [];
+      if (pendingInvites && pendingInvites.length > 0) {
+        const inviterIds = [...new Set(pendingInvites.map(i => i.invited_by))];
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, username')
+          .in('id', inviterIds);
+
+        invitesWithProfiles = pendingInvites.map(invite => ({
+          ...invite,
+          inviterProfile: profiles?.find(p => p.id === invite.invited_by) || { full_name: 'Rekan Pengajar', username: 'pengajar' }
+        }));
+      }
+      setInvitations(invitesWithProfiles);
+
+      // Fetch Enrollments (simple, no join to avoid RLS issues)
       const courseIds = teacherCourses?.map(c => c.id) || [];
       if (courseIds.length > 0) {
         const { data: enrollments } = await supabase
           .from('enrollments')
-          .select(`
-            id,
-            enrolled_at,
-            course:course_id (title),
-            profile:user_id (full_name, email)
-          `)
+          .select('id, user_id, course_id, enrolled_at')
           .in('course_id', courseIds)
           .order('enrolled_at', { ascending: false });
 
-        if (enrollments) setStudents(enrollments);
+        if (enrollments && enrollments.length > 0) {
+          // Fetch profiles separately
+          const studentIds = [...new Set(enrollments.map(e => e.user_id))];
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', studentIds);
+
+          // Attach profile and course info
+          const enriched = enrollments.map(e => ({
+            ...e,
+            profile: profiles?.find(p => p.id === e.user_id) || null,
+            course: { title: teacherCourses?.find(c => String(c.id) === String(e.course_id))?.title }
+          }));
+
+          setStudents(enriched);
+        }
       }
 
       setLoading(false);
     };
 
     fetchData();
-  }, [navigate]);
+  }, [navigate, reloadTrigger]);
+
+  const handleInvitationAction = async (inviteId, action) => {
+    try {
+      if (action === 'accept') {
+        const { error } = await supabase
+          .from('course_collaborators')
+          .update({ status: 'accepted' })
+          .eq('id', inviteId);
+        if (error) throw error;
+        alert('Undangan diterima! Anda sekarang dapat ikut mengedit course ini.');
+      } else {
+        const { error } = await supabase
+          .from('course_collaborators')
+          .delete()
+          .eq('id', inviteId);
+        if (error) throw error;
+        alert('Undangan berhasil ditolak.');
+      }
+      setReloadTrigger(prev => prev + 1);
+    } catch (err) {
+      alert('Gagal memproses undangan: ' + err.message);
+    }
+  };
 
   const formatPrice = (price) => {
-    if (price >= 1000000) return `Rp ${(price / 1000000).toFixed(1)}M`;
-    return `Rp ${price.toLocaleString()}`;
+    return `Rp ${price.toLocaleString('id-ID')}`;
+  };
+
+  const handleDeleteCourse = async (id) => {
+    if (window.confirm('Apakah Anda yakin ingin menghapus kursus ini? Semua data terkait (syllabus, section) akan ikut terhapus.')) {
+      setLoading(true);
+      try {
+        const { error } = await supabase.from('courses').delete().eq('id', id);
+        if (error) throw error;
+        setCourses(courses.filter(c => c.id !== id));
+        alert('Kursus berhasil dihapus.');
+      } catch (err) {
+        alert('Gagal menghapus kursus: ' + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   return (
@@ -78,15 +185,67 @@ const TeacherDashboard = () => {
       <TeacherSidebar user={user} />
 
       {/* Main Content */}
-      <main className="flex-1 lg:ml-[280px] pt-20 lg:pt-10 pb-24 lg:pb-8 px-margin-mobile lg:px-margin-desktop w-full max-w-[1440px] mx-auto min-h-screen">
-        {/* Welcome Section */}
-        <section className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-black text-on-surface mb-2 flex items-center gap-3">Selamat Datang, {user?.full_name?.split(' ')[0] || 'Coach'}! <WaveIcon className="w-10 h-10 md:w-12 md:h-12" /></h1>
-          <p className="text-lg text-on-surface-variant font-bold">Berikut adalah ringkasan aktivitas kelas Anda hari ini.</p>
-        </section>
+      <main className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-[280px]">
+        {/* Top Header */}
+        <header className="flex justify-between items-center px-8 lg:px-12 h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10 shrink-0">
+          <div className="flex items-center gap-4">
+            <h2 className="font-headline-md text-headline-md font-extrabold text-on-surface">Dashboard</h2>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+              <NotificationDropdown />
+              <ProfileDropdown />
+            </div>
+          </div>
+        </header>
 
-        {/* Metrics Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="flex-1 overflow-y-auto pt-8 lg:pt-10 pb-24 lg:pb-8 px-margin-mobile lg:px-margin-desktop w-full max-w-[1440px] mx-auto">
+          {/* Welcome Section */}
+          <section className="mb-12">
+            <h1 className="text-4xl md:text-5xl font-black text-on-surface mb-2 flex items-center gap-3">Selamat Datang, {user?.full_name?.split(' ')[0] || 'Coach'}! <WaveIcon className="w-10 h-10 md:w-12 md:h-12" /></h1>
+            <p className="text-lg text-on-surface-variant font-bold">Berikut adalah ringkasan aktivitas kelas Anda hari ini.</p>
+          </section>
+
+          {/* Pending Invitations Section */}
+          {invitations.length > 0 && (
+            <section className="mb-12">
+              <div className="bg-tertiary-container text-on-tertiary-container rounded-[32px] p-8 border-4 border-on-surface shadow-[8px_8px_0px_0px_#1c1b1b]">
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="material-symbols-outlined text-4xl font-black">group_add</span>
+                  <h2 className="text-2xl font-black text-on-tertiary-container">Undangan Kolaborasi Baru</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {invitations.map((invite) => (
+                    <div key={invite.id} className="bg-white p-6 rounded-[24px] border-4 border-on-surface shadow-[4px_4px_0px_0px_#1c1b1b] flex flex-col justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-black text-on-surface line-clamp-1">{invite.courses?.title}</h3>
+                        <p className="text-sm font-bold text-on-surface-variant mt-1">
+                          Diundang oleh: <span className="text-primary font-black">{invite.inviterProfile?.full_name}</span> (@{invite.inviterProfile?.username})
+                        </p>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleInvitationAction(invite.id, 'accept')}
+                          className="flex-1 py-3 bg-[#FF6B4A] hover:bg-[#ff5533] text-white font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#000] active:translate-y-0.5 active:shadow-none transition-all text-sm flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-sm font-black">check</span> Terima
+                        </button>
+                        <button
+                          onClick={() => handleInvitationAction(invite.id, 'reject')}
+                          className="flex-1 py-3 bg-white hover:bg-surface-variant/20 text-error font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#000] active:translate-y-0.5 active:shadow-none transition-all text-sm flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-sm font-black">close</span> Tolak
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Metrics Grid */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <div className="bg-primary-container p-8 rounded-[32px] border-4 border-on-surface shadow-[8px_8px_0px_0px_#1c1b1b]">
             <div className="flex justify-between items-start mb-6">
               <div className="w-14 h-14 bg-white rounded-full border-2 border-on-surface flex items-center justify-center">
@@ -116,7 +275,7 @@ const TeacherDashboard = () => {
               </div>
               <span className="text-xs font-black px-4 py-1 bg-white border-2 border-on-surface rounded-full uppercase">Earnings</span>
             </div>
-            <div className="text-5xl font-black text-on-tertiary-container mb-1 truncate">{formatPrice(courses.reduce((acc, c) => acc + (c.price * 0), 0))}</div>
+            <div className="text-2xl font-black text-on-tertiary-container mb-1 truncate">{formatPrice(students.reduce((acc, s) => { const course = courses.find(c => String(c.id) === String(s.course_id)); return acc + (course?.price || 0); }, 0))}</div>
             <div className="text-xl text-on-tertiary-container font-black">Pendapatan</div>
           </div>
         </section>
@@ -146,15 +305,39 @@ const TeacherDashboard = () => {
                     </div>
                     <div className="flex-grow flex flex-col justify-between py-1">
                       <div>
-                        <div className="flex justify-between items-start mb-2">
+                        <div className="flex justify-between items-start mb-2 flex-wrap gap-2">
                           <h3 className="text-2xl font-black text-on-surface line-clamp-1">{course.title}</h3>
-                          <span className="px-3 py-1 bg-surface-variant border-2 border-on-surface rounded-full text-[10px] font-black uppercase tracking-wider">{course.category}</span>
+                          <div className="flex items-center gap-2">
+                            {course.isCollaboration && (
+                              <span className="px-3 py-1 bg-tertiary-container border-2 border-on-surface rounded-full text-[10px] font-black uppercase tracking-wider text-on-tertiary-container flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs font-black">group</span> Collab
+                              </span>
+                            )}
+                            <span className="px-3 py-1 bg-surface-variant border-2 border-on-surface rounded-full text-[10px] font-black uppercase tracking-wider">{course.category}</span>
+                          </div>
                         </div>
-                        <p className="text-on-surface-variant font-bold text-sm">Rp {course.price.toLocaleString()} • 4.9 Rating</p>
+                        <p className="text-on-surface-variant font-bold text-sm">
+                          {formatPrice(course.price)} •{' '}
+                          {ratingsMap[course.id]?.length > 0
+                            ? `⭐ ${(ratingsMap[course.id].reduce((a, b) => a + b, 0) / ratingsMap[course.id].length).toFixed(1)} (${ratingsMap[course.id].length} ulasan)`
+                            : 'Belum ada rating'}
+                        </p>
                       </div>
                       <div className="flex gap-3 mt-4">
-                        <button className="px-6 py-2 bg-primary-container text-on-primary-container font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all">Edit</button>
-                        <button className="px-6 py-2 bg-surface text-error font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all">Hapus</button>
+                        <button 
+                          onClick={() => navigate(`/teacher/courses/edit/${course.id}`)}
+                          className="px-6 py-2 bg-primary-container text-on-primary-container font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        {!course.isCollaboration && (
+                          <button 
+                            onClick={() => handleDeleteCourse(course.id)}
+                            className="px-6 py-2 bg-white text-error font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all cursor-pointer"
+                          >
+                            Hapus
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -192,6 +375,7 @@ const TeacherDashboard = () => {
             </div>
           </section>
         </div>
+      </div>
       </main>
     </div>
   );

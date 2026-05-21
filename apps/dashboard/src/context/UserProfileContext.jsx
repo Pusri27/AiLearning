@@ -47,19 +47,21 @@ export const UserProfileProvider = ({ children }) => {
     });
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const logout = () => {
+    // Reset state immediately (optimistic) so UI doesn't lag
     localStorage.removeItem('harin_guest_session');
-    setProfile({ 
+    setProfile({
       id: '',
-      fullName: '', 
-      username: '', 
-      avatarUrl: '', 
-      email: '', 
-      role: 'student', 
+      fullName: '',
+      username: '',
+      avatarUrl: '',
+      email: '',
+      role: 'student',
       friendCode: '',
-      isGuest: false 
+      isGuest: false,
     });
+    // Fire signOut in background — no await needed
+    supabase.auth.signOut();
   };
 
   useEffect(() => {

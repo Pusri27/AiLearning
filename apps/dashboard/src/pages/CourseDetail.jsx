@@ -17,6 +17,25 @@ const CourseDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [showGuestPrompt, setShowGuestPrompt] = useState(false);
+  const [syllabus, setSyllabus] = useState([]);
+  const [instructorStats, setInstructorStats] = useState({ courses: 0, students: 0 });
+  const [enrollmentCount, setEnrollmentCount] = useState(0);
+  const [avgRating, setAvgRating] = useState(null);
+  const [ratingCount, setRatingCount] = useState(0);
+  const [collaborators, setCollaborators] = useState([]);
+
+  // Helper: Get first sentence for description
+  const getBriefDesc = (text) => {
+    if (!text) return 'Pelajari materi ini untuk meningkatkan skill kamu.';
+    return text.split('.')[0] + '.';
+  };
+
+  // Helper: Calculate Hours based on video count
+  const calculateHours = () => {
+    const videoCount = syllabus.filter(s => s.video_url).length;
+    if (videoCount === 0) return '2 Hours'; // Min hours
+    return `${videoCount * 0.5} Hours`; // Estimate 30 mins per video
+  };
 
   useEffect(() => {
     fetchCourse();
@@ -28,33 +47,104 @@ const CourseDetail = () => {
 
   const fetchCourse = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    // 1. Fetch Course Data
+    const { data: courseData, error: courseError } = await supabase
       .from('courses')
       .select('*')
       .eq('id', id)
       .single();
 
-    if (error) {
-      console.error('Error fetching course:', error);
-      if (id === 'ai-engineering') {
-         setCourse({
-           id: 'ai-engineering',
-           title: 'Master AI Engineering',
-           category: 'Computer Science',
-           level: 'Intermediate',
-           price: 1499000,
-           duration: '20 Hours',
-           students: '15k+',
-           rating: 4.9,
-           reviews: '2.5k',
-           instructor: 'Sarah Jenkins',
-           instructor_role: 'Lead AI Researcher',
-           description: 'Dive deep into the world of Artificial Intelligence with our comprehensive Master AI Engineering course.',
-           image_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD2LJJfpnZ2ROq0HbtyCrNvo4BVBAh4r5sRDo-mlasd95Wf3RUzaqJgje2skV5ndpuzcVtDXKFzYMzI4Lvxp-w7cWq91U3d45el4GB9Vh09nN5738gWVXErwllHea4CIaJ5k_rCZuBJatHzw_HC5Bd13-FNswv88zxUnJ8KlU7oPFpI1AFpLXMqNFIt4spmT_YeIyVDwlbOAkesLsK2ejYpe_G2c2km9b_93iqzlr1AvKQjGg4CVlb1QA4XVMIH4Z-8TvQHYXhw4ZI'
-         });
-      }
+    if (courseError) {
+      console.error('Error fetching course:', courseError);
     } else {
-      setCourse(data);
+      // 2. Fetch Instructor Data Separately
+      let { data: instructorData } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', courseData.instructor_id)
+        .maybeSingle();
+
+      if (!instructorData && courseData.instructor) {
+        const { data: fallbackData } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .ilike('full_name', courseData.instructor)
+          .limit(1)
+          .maybeSingle();
+        if (fallbackData) instructorData = fallbackData;
+      }
+      
+      // Combine them manually
+      setCourse({ ...courseData, profiles: instructorData });
+      
+      // 3. Fetch Syllabus
+      const { data: syllabusData } = await supabase
+        .from('course_syllabus')
+        .select('*')
+        .eq('course_id', id)
+        .order('sort_order', { ascending: true });
+      if (syllabusData) setSyllabus(syllabusData);
+
+      // Fetch enrollment count (correct syntax)
+      const { count: totalCount } = await supabase
+        .from('enrollments')
+        .select('*', { count: 'exact', head: true })
+        .eq('course_id', id);
+      setEnrollmentCount(totalCount || 0);
+
+      // Fetch real ratings from course_ratings table
+      const { data: ratings } = await supabase
+        .from('course_ratings')
+        .select('rating')
+        .eq('course_id', id);
+      if (ratings && ratings.length > 0) {
+        const avg = ratings.reduce((a, b) => a + b.rating, 0) / ratings.length;
+        setAvgRating(avg.toFixed(1));
+        setRatingCount(ratings.length);
+      }
+
+      // 4. Fetch Instructor Stats
+      const { data: instructorCourses } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('instructor_id', courseData.instructor_id);
+      
+      const instructorCourseIds = instructorCourses?.map(c => c.id) || [];
+      const { count: totalStudents } = await supabase
+        .from('enrollments')
+        .select('*', { count: 'exact', head: true })
+        .in('course_id', instructorCourseIds);
+
+      setInstructorStats({
+        courses: instructorCourseIds.length,
+        students: totalStudents || 0
+      });
+
+      // 4b. Fetch Accepted Collaborators Safely
+      const { data: collabData } = await supabase
+        .from('course_collaborators')
+        .select('teacher_id, role')
+        .eq('course_id', id)
+        .eq('status', 'accepted');
+      
+      if (collabData && collabData.length > 0) {
+        const teacherIds = collabData.map(c => c.teacher_id);
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('id, full_name, username, avatar_url')
+          .in('id', teacherIds);
+          
+        if (profileData) {
+          const joinedCollaborators = collabData.map(c => {
+            const p = profileData.find(prof => prof.id === c.teacher_id);
+            return { ...p, role: c.role };
+          }).filter(c => c.id); // ensure profile was found
+          
+          setCollaborators(joinedCollaborators);
+        }
+      }
+
+      // 5. Check Enrollment Status for Current User
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { data: enrollment } = await supabase
@@ -153,17 +243,19 @@ const CourseDetail = () => {
               <h1 className="font-headline-xl text-headline-xl text-on-background mb-4">{course.title}</h1>
               <div className="flex flex-wrap items-center gap-6 mb-8 text-on-surface-variant font-body-md">
                 <div className="flex items-center gap-1">
-                  <Icon name="star" className="w-5 h-5 text-primary-container fill-current" />
-                  <span className="font-bold text-on-background">4.9</span>
-                  <span>(2.5k reviews)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Icon name="schedule" className="w-5 h-5" />
-                  <span>{course.duration || '20 Hours'}</span>
+                  {enrollmentCount > 0 ? (
+                    <>
+                      <Icon name="star" className="w-5 h-5 text-primary-container fill-current" />
+                      <span className="font-bold text-on-background">{avgRating}</span>
+                      <span>({enrollmentCount} reviews)</span>
+                    </>
+                  ) : (
+                    <span className="italic text-sm">Belum ada ulasan</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Icon name="group" className="w-5 h-5" />
-                  <span>{course.students || '15k+'} Students</span>
+                  <span>{enrollmentCount.toLocaleString()} Students</span>
                 </div>
               </div>
               <div className="mb-8">
@@ -172,7 +264,7 @@ const CourseDetail = () => {
               <div className="flex flex-col sm:flex-row gap-4 mt-auto">
                 {isEnrolled ? (
                   <button 
-                    onClick={() => navigate('/study')}
+                    onClick={() => navigate(`/courses/${course.id}/learn`)}
                     className="px-8 py-4 bg-primary text-white rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1"
                   >
                     Lanjutkan Belajar
@@ -198,13 +290,30 @@ const CourseDetail = () => {
             </div>
             <div className="lg:w-1/3 bg-surface relative min-h-[300px] border-l-2 border-on-background">
               <img alt={course.title} className="absolute inset-0 w-full h-full object-cover" src={course.image_url || 'https://via.placeholder.com/600x400'}/>
-              <div className="absolute bottom-6 right-6 bg-surface border-2 border-on-background rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)] flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full border-2 border-on-background overflow-hidden">
-                  <img alt={course.instructor} className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLEpqpdh19OgQAjpf4BLYKQcirfyvHVXDpKMX5l3SGQ3gDc7KeXq0cB2_Yh0rNlbPzigVXGOC0hYdYuplTFYRRmZllIexjIGj-eN7n4S-570EzquU4-xvnlrcFs7aU3IH7zP65ivR_fBjQnOW9DDx5-Aa8Oz4ijDVQoomPn3msZ88eGiPrw150cpWxHyeT4s93K-IyDMq3c5QkOg3XMI1-3Rbwqj8HOwrG5_ULJlkv0OAhFSiq5bwO76JIUa7DWMyFdV0fFbQp1eM"/>
+              <div className="absolute bottom-6 right-6 bg-white border-2 border-on-background rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)] flex items-center gap-3 max-w-[280px]">
+                <div className="flex -space-x-4">
+                  <div className="w-12 h-12 rounded-full border-2 border-on-background overflow-hidden bg-white z-10 flex-shrink-0">
+                    <img alt={course.profiles?.full_name || course.instructor} className="w-full h-full object-cover" src={course.profiles?.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(course.profiles?.full_name || course.instructor || 'I')}/>
+                  </div>
+                  {collaborators.slice(0, 2).map((collab, idx) => (
+                    <div key={idx} className="w-12 h-12 rounded-full border-2 border-on-background overflow-hidden bg-white flex-shrink-0" style={{ zIndex: 9 - idx }}>
+                      <img alt={collab.full_name} className="w-full h-full object-cover" src={collab.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(collab.full_name || 'C')}/>
+                    </div>
+                  ))}
+                  {collaborators.length > 2 && (
+                    <div className="w-12 h-12 rounded-full border-2 border-on-background bg-secondary-container flex items-center justify-center font-black text-xs text-on-secondary-container z-0 flex-shrink-0">
+                      +{collaborators.length - 2}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <p className="font-label-bold text-label-bold text-sm">{course.instructor}</p>
-                  <p className="text-xs text-on-surface-variant">{course.instructor_role || 'Lead Instructor'}</p>
+                  <p className="font-label-bold text-label-bold text-sm line-clamp-1">
+                    {course.profiles?.full_name || course.instructor}
+                    {collaborators.length > 0 && ` + ${collaborators.length} Guru`}
+                  </p>
+                  <p className="text-xs text-on-surface-variant line-clamp-1">
+                    {collaborators.length > 0 ? 'Team Instructors' : (course.instructor_role || 'Lead Instructor')}
+                  </p>
                 </div>
               </div>
             </div>
@@ -222,37 +331,65 @@ const CourseDetail = () => {
               <section className="bg-secondary-fixed rounded-xl border-2 border-on-background p-6 md:p-8 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)]">
                 <h2 className="font-headline-lg text-headline-lg mb-6 text-on-secondary-fixed">Apa yang Akan Kamu Pelajari</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-surface border-2 border-on-background p-4 rounded-lg flex gap-4 items-start shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
-                    <div className="p-2 bg-secondary-container rounded-md border-2 border-on-surface flex items-center justify-center">
-                      <Icon name="account_tree" className="w-6 h-6 text-secondary" />
+                  {syllabus.filter(s => s.type !== 'assignment').length > 0 ? 
+                    syllabus.filter(s => s.type !== 'assignment').slice(0, 4).map((s) => (
+                    <div key={s.id} className="bg-surface border-2 border-on-background p-4 rounded-lg flex gap-4 items-start shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
+                      <div className="p-2 bg-secondary-container rounded-md border-2 border-on-surface flex items-center justify-center">
+                        <Icon name="account_tree" className="w-6 h-6 text-secondary" />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <h3 className="font-label-bold text-label-bold mb-1 truncate">{s.title}</h3>
+                        <p className="text-[10px] text-on-surface-variant line-clamp-2">{getBriefDesc(s.content)}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-label-bold text-label-bold mb-1">Building RAG apps</h3>
-                      <p className="text-sm text-on-surface-variant">Create Retrieval-Augmented Generation applications.</p>
-                    </div>
-                  </div>
+                  )) : (
+                    <p className="text-sm text-on-secondary-fixed italic">Belum ada materi silabus yang diunggah.</p>
+                  )}
                 </div>
               </section>
             </div>
 
             <div className="space-y-8">
+              {/* Lead Instructor Card */}
               <div className="bg-surface rounded-xl border-2 border-on-background p-6 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)] flex flex-col items-center text-center">
                 <div className="w-24 h-24 rounded-full border-2 border-on-background overflow-hidden mb-4 shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
-                  <img alt={course.instructor} className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzKGDmVk-QUCgSmvJBv2Ls_wzh-BklBDgXkezS5_ju0ndmrH5rT_veXJSoHiy6Cee2gXUaiqhDQUsUSSFZ_bH-8I-0uliPmYQOwqI9ajud0KByNC-HY9Il0GJsFRfxlsLHCfNBcN3JqwSYCAh_mQf3pif91o8PNcYm3WxBOVMWuQNqtK5zKF_m551wixybylvW4F_zdT3mYyv0Bu3T8MGSQSanS1SecNksNEaMS1Zf-w8JwmbvR7uTXZ4qOXn7YnFEa9pSzLtwZVY"/>
+                  <img alt={course.profiles?.full_name || course.instructor} className="w-full h-full object-cover" src={course.profiles?.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(course.profiles?.full_name || course.instructor || 'I')}/>
                 </div>
-                <h3 className="font-headline-md text-headline-md mb-1">{course.instructor}</h3>
-                <p className="text-sm font-label-bold text-primary mb-4 uppercase tracking-wider">{course.instructor_role || 'Lead Instructor'}</p>
+                <h3 className="font-headline-md text-headline-md mb-1">{course.profiles?.full_name || course.instructor || 'Instructor'}</h3>
+                <p className="text-sm font-label-bold text-primary mb-4 uppercase tracking-wider">Lead Instructor</p>
                 <div className="w-full grid grid-cols-2 gap-4 border-t-2 border-on-background pt-4">
                   <div>
-                    <p className="font-headline-md text-xl">12</p>
+                    <p className="font-headline-md text-xl">{instructorStats.courses}</p>
                     <p className="text-xs text-on-surface-variant">Courses</p>
                   </div>
                   <div>
-                    <p className="font-headline-md text-xl">45k</p>
+                    <p className="font-headline-md text-xl">{instructorStats.students >= 1000 ? `${(instructorStats.students / 1000).toFixed(1)}k` : instructorStats.students}</p>
                     <p className="text-xs text-on-surface-variant">Students</p>
                   </div>
                 </div>
               </div>
+
+              {/* Collaborators Card */}
+              {collaborators.length > 0 && (
+                <div className="bg-surface rounded-xl border-2 border-on-background p-6 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)]">
+                  <h3 className="font-headline-sm text-headline-sm mb-4 border-b-2 border-on-background pb-2 flex items-center gap-2">
+                    <span className="material-symbols-outlined font-black text-xl">group</span> Co-Instructors
+                  </h3>
+                  <div className="space-y-4">
+                    {collaborators.map((collab, idx) => (
+                      <div key={idx} className="flex items-center gap-3 p-3 bg-surface-container-low border-2 border-on-background rounded-lg shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
+                        <div className="w-10 h-10 rounded-full border-2 border-on-background overflow-hidden flex-shrink-0">
+                          <img alt={collab.full_name} className="w-full h-full object-cover" src={collab.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(collab.full_name || 'C')}/>
+                        </div>
+                        <div>
+                          <p className="font-label-bold text-sm text-on-background line-clamp-1">{collab.full_name}</p>
+                          <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{collab.role === 'editor' ? 'Co-Instructor' : 'Contributor'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

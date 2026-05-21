@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { useUserProfile } from '../context/UserProfileContext';
 import Icon from './Icon';
 
 const NotificationDropdown = () => {
+  const { profile } = useUserProfile();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -17,10 +19,19 @@ const NotificationDropdown = () => {
     const uid = session.user.id;
 
     // Fetch notifications and check if they are in notification_reads
-    const { data: notifs, error } = await supabase
+    let query = supabase
       .from('notifications')
-      .select('*, notification_reads!left(user_id)')
-      .or(`user_id.eq.${uid},user_id.is.null`)
+      .select('*, notification_reads!left(user_id)');
+
+    if (profile?.role === 'teacher') {
+      // Teachers only see notifications explicitly sent to them, excluding student-centric ones
+      query = query.eq('user_id', uid).neq('type', 'achievement').neq('type', 'blog');
+    } else {
+      // Students see theirs + broadcasts
+      query = query.or(`user_id.eq.${uid},user_id.is.null`);
+    }
+
+    const { data: notifs, error } = await query
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -36,7 +47,9 @@ const NotificationDropdown = () => {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    if (profile?.role !== undefined) {
+      fetchNotifications();
+    }
 
     // Realtime subscription
     const channel = supabase
@@ -55,7 +68,7 @@ const NotificationDropdown = () => {
       supabase.removeChannel(channel);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [profile?.role]);
 
   const markAsRead = async (notifId) => {
     const { data: { session } } = await supabase.auth.getSession();

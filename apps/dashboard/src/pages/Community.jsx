@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
+import TeacherSidebar from '../components/TeacherSidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
@@ -50,6 +51,8 @@ const Community = () => {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState('text');
   const [joinStatus, setJoinStatus] = useState(''); // '', 'loading', 'success', 'error'
+  const [copiedInviteCode, setCopiedInviteCode] = useState(false);
+  const [copiedFriendCode, setCopiedFriendCode] = useState(false);
 
   const scrollRef = useRef(null);
 
@@ -181,22 +184,42 @@ const Community = () => {
     let messageChannel = null;
     if (activeChannel && activeChannel.type !== 'voice') {
       const fetchMessages = async () => {
-        const { data } = await supabase
-          .from('community_messages')
-          .select('*, profiles:user_id(full_name, avatar_url)')
-          .eq('channel_id', activeChannel.id)
-          .order('created_at', { ascending: true })
-          .limit(50);
-        
-        if (data) {
-          setMessages(data.map(m => ({
-            id: m.id,
-            user: m.profiles?.full_name || 'Anonymous',
-            text: m.text,
-            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            avatar: m.profiles?.avatar_url || 'https://i.pravatar.cc/150?u=' + m.user_id,
-            userId: m.user_id
-          })));
+        try {
+          const { data: messagesData, error: messagesError } = await supabase
+            .from('community_messages')
+            .select('*')
+            .eq('channel_id', activeChannel.id)
+            .order('created_at', { ascending: true })
+            .limit(50);
+          
+          if (messagesError) throw messagesError;
+          
+          if (messagesData && messagesData.length > 0) {
+            const userIds = [...new Set(messagesData.map(m => m.user_id))];
+            
+            const { data: profilesData, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, full_name, avatar_url')
+              .in('id', userIds);
+              
+            const joinedMessages = messagesData.map(m => {
+              const profile = profilesData?.find(p => p.id === m.user_id);
+              return {
+                id: m.id,
+                user: profile?.full_name || 'Anonymous',
+                text: m.text,
+                time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                avatar: profile?.avatar_url || 'https://i.pravatar.cc/150?u=' + m.user_id,
+                userId: m.user_id
+              };
+            });
+            
+            setMessages(joinedMessages);
+          } else {
+            setMessages([]);
+          }
+        } catch (err) {
+          console.error('Error fetching messages:', err);
         }
       };
       fetchMessages();
@@ -269,6 +292,16 @@ const Community = () => {
   const copyInviteCode = (code) => {
     if (code) {
       navigator.clipboard.writeText(code);
+      setCopiedInviteCode(true);
+      setTimeout(() => setCopiedInviteCode(false), 2000);
+    }
+  };
+
+  const copyFriendCode = (code) => {
+    if (code) {
+      navigator.clipboard.writeText(code);
+      setCopiedFriendCode(true);
+      setTimeout(() => setCopiedFriendCode(false), 2000);
     }
   };
 
@@ -476,26 +509,88 @@ const Community = () => {
     setJoinStatus('loading');
 
     try {
-      // Use the RPC function we created in SQL
-      const { data, error } = await supabase.rpc('join_community', { invite_code_input: inviteCodeInput });
+      // Find the community by invite code case-sensitively using .eq()
+      const { data: commData, error: findError } = await supabase
+        .from('communities')
+        .select('*')
+        .eq('invite_code', inviteCodeInput.trim())
+        .single();
 
-      if (error) throw error;
+      if (findError || !commData) {
+        throw new Error('Community not found or invalid invite code');
+      }
 
-      if (data) {
+      // Check if user is already a member
+      const { data: existingMember } = await supabase
+        .from('community_members')
+        .select('id')
+        .eq('community_id', commData.id)
+        .eq('user_id', profile.id)
+        .maybeSingle();
+
+      if (existingMember) {
+        // Already a member, just make it active and close modal
         setJoinStatus('success');
         setInviteCodeInput('');
-        await fetchServers(); // Refresh server list
-        // Find the new server and set it active
-        const { data: newServer } = await supabase.from('communities').select('*').eq('id', data).single();
-        if (newServer) setActiveServer(newServer);
+        await fetchServers();
+        setActiveServer(commData);
         
+        // Fetch channels for this server and select the first text channel
+        const { data: channelsData } = await supabase
+          .from('channels')
+          .select('*')
+          .eq('community_id', commData.id)
+          .order('created_at', { ascending: true });
+
+        if (channelsData && channelsData.length > 0) {
+          const firstText = channelsData.find(c => c.type === 'text') || channelsData[0];
+          setActiveChannel(firstText);
+        } else {
+          setActiveChannel(null);
+        }
+
         setTimeout(() => {
-          setShowJoinModal(false);
+          setShowAddServerModal(false);
           setJoinStatus('');
         }, 1500);
-      } else {
-        setJoinStatus('error');
+        return;
       }
+
+      // Insert into community_members
+      const { error: joinError } = await supabase
+        .from('community_members')
+        .insert([{
+          community_id: commData.id,
+          user_id: profile.id,
+          role: 'member'
+        }]);
+
+      if (joinError) throw joinError;
+
+      // Successfully joined!
+      setJoinStatus('success');
+      setInviteCodeInput('');
+      await fetchServers(); // Refresh server list
+      
+      // Fetch channels and set active server + channel
+      const { data: channelsData } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('community_id', commData.id)
+        .order('created_at', { ascending: true });
+        
+      setActiveServer(commData);
+      if (channelsData && channelsData.length > 0) {
+        const firstText = channelsData.find(c => c.type === 'text') || channelsData[0];
+        setActiveChannel(firstText);
+      } else {
+        setActiveChannel(null);
+      }
+
+      setTimeout(() => {
+        setShowAddServerModal(false);
+        setJoinStatus('');
+      }, 1500);
     } catch (err) {
       console.error('Join error:', err);
       setJoinStatus('error');
@@ -620,9 +715,9 @@ const Community = () => {
 
   return (
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
-      <Sidebar />
+      {profile?.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className={`flex-1 flex overflow-hidden ${profile?.role === 'teacher' ? 'lg:ml-[280px] pb-16 lg:pb-0' : ''}`}>
         
         {/* ── Discord-style Server Sidebar ──────────────────────── */}
         <div className="w-[72px] bg-surface-container-lowest border-r-2 border-on-surface flex flex-col items-center py-4 gap-4">
@@ -1083,10 +1178,10 @@ const Community = () => {
                       {profile?.friendCode || '------'}
                     </div>
                     <button 
-                      onClick={() => copyInviteCode(profile?.friendCode)}
-                      className="bg-on-surface text-surface px-4 rounded-xl font-black text-[10px]"
+                      onClick={() => copyFriendCode(profile?.friendCode)}
+                      className={`px-4 rounded-xl font-black text-[10px] transition-all duration-200 ${copiedFriendCode ? 'bg-success text-white' : 'bg-on-surface text-surface'}`}
                     >
-                      COPY
+                      {copiedFriendCode ? 'COPIED!' : 'COPY'}
                     </button>
                   </div>
                 </div>
@@ -1156,9 +1251,9 @@ const Community = () => {
                   </div>
                   <button 
                     onClick={() => copyInviteCode(activeServer?.invite_code)}
-                    className="bg-on-surface text-surface px-4 rounded-xl font-black text-[10px]"
+                    className={`px-4 rounded-xl font-black text-[10px] transition-all duration-200 ${copiedInviteCode ? 'bg-success text-white' : 'bg-on-surface text-surface'}`}
                   >
-                    COPY
+                    {copiedInviteCode ? 'COPIED!' : 'COPY'}
                   </button>
                 </div>
               </div>
@@ -1208,9 +1303,9 @@ const Community = () => {
                     <input 
                       type="text" 
                       value={inviteCodeInput}
-                      onChange={e => setInviteCodeInput(e.target.value.toUpperCase())}
+                      onChange={e => setInviteCodeInput(e.target.value)}
                       placeholder="e.g. h8a3k2L9"
-                      className="w-full bg-surface-container-high border-2 border-on-surface rounded-xl px-4 py-3 font-black uppercase tracking-widest focus:outline-none focus:ring-4 ring-secondary/20 transition-all text-center"
+                      className="w-full bg-surface-container-high border-2 border-on-surface rounded-xl px-4 py-3 font-black tracking-widest focus:outline-none focus:ring-4 ring-secondary/20 transition-all text-center"
                     />
                   </div>
                 </div>
