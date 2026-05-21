@@ -12,6 +12,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const selectedCartIds = location.state?.selectedCartIds || [];
+  const directCourseId = location.state?.courseId;
 
   const [cartItems,      setCartItems]      = useState([]);
   const [loading,        setLoading]        = useState(true);
@@ -33,8 +34,8 @@ const Checkout = () => {
       if (!session) { navigate('/login'); return; }
       setUser(session.user);
 
-      // Jika tidak ada item yang dipilih, kembalikan ke keranjang
-      if (selectedCartIds.length === 0) {
+      // Jika tidak ada item yang dipilih dan tidak ada directCourseId, kembalikan ke keranjang
+      if (selectedCartIds.length === 0 && !directCourseId) {
         navigate('/cart');
         return;
       }
@@ -56,20 +57,37 @@ const Checkout = () => {
         }
       }
 
-      // Ambil item terpilih di cart milik user beserta detail kursusnya
-      const { data, error } = await supabase
-        .from('cart')
-        .select(`id, courses (*)`)
-        .in('id', selectedCartIds)
-        .eq('user_id', session.user.id);
+      if (directCourseId) {
+        // Ambil data kursus secara langsung (tanpa lewat cart)
+        const { data, error } = await supabase
+          .from('courses')
+          .select('*')
+          .eq('id', directCourseId)
+          .single();
 
-      if (!error && data) {
-        setCartItems(data.map(item => ({ cartId: item.id, ...item.courses })));
+        if (!error && data) {
+          setCartItems([{ cartId: null, ...data }]);
+        } else {
+          showToast('Gagal memuat detail kursus.', 'error');
+          navigate(-1);
+          return;
+        }
+      } else {
+        // Ambil item terpilih di cart milik user beserta detail kursusnya
+        const { data, error } = await supabase
+          .from('cart')
+          .select(`id, courses (*)`)
+          .in('id', selectedCartIds)
+          .eq('user_id', session.user.id);
+
+        if (!error && data) {
+          setCartItems(data.map(item => ({ cartId: item.id, ...item.courses })));
+        }
       }
       setLoading(false);
     };
     init();
-  }, [navigate, selectedCartIds]);
+  }, [navigate, selectedCartIds, directCourseId]);
 
   const total = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
 
@@ -119,9 +137,11 @@ const Checkout = () => {
         throw enrollError;
       }
 
-      // 3. Hapus semua item dari cart setelah berhasil
-      const cartIds = cartItems.map(item => item.cartId);
-      await supabase.from('cart').delete().in('id', cartIds);
+      // 3. Hapus semua item dari cart setelah berhasil (hanya jika memang berasal dari cart)
+      const cartIds = cartItems.map(item => item.cartId).filter(Boolean);
+      if (cartIds.length > 0) {
+        await supabase.from('cart').delete().in('id', cartIds);
+      }
 
       // Achievements Logic
       await awardAchievement(user.id, 'first_step');
