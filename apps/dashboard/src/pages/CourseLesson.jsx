@@ -31,8 +31,44 @@ const CourseLesson = () => {
 
   const getEmbedUrl = (url) => {
     if (!url) return '';
-    if (url.includes('youtu.be/')) return `https://www.youtube.com/embed/${url.split('youtu.be/')[1].split('?')[0]}`;
-    if (url.includes('watch?v=')) return `https://www.youtube.com/embed/${url.split('watch?v=')[1].split('&')[0]}`;
+    url = url.trim();
+    
+    let videoId = null;
+    
+    try {
+      if (url.includes('/embed/')) {
+        return url;
+      }
+      
+      if (url.includes('youtu.be/')) {
+        const parts = url.split('youtu.be/');
+        if (parts[1]) {
+          videoId = parts[1].split('?')[0].split('/')[0];
+        }
+      } else if (url.includes('/shorts/')) {
+        const parts = url.split('/shorts/');
+        if (parts[1]) {
+          videoId = parts[1].split('?')[0].split('/')[0];
+        }
+      } else if (url.includes('youtube.com')) {
+        const urlObj = new URL(url);
+        videoId = urlObj.searchParams.get('v');
+      }
+      
+      if (!videoId) {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) {
+          videoId = match[2];
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse YouTube URL:", e);
+    }
+    
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
     return url;
   };
 
