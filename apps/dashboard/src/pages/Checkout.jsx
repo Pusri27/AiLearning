@@ -93,6 +93,7 @@ const Checkout = () => {
   }, [navigate, selectedCartIdsStr, directCourseId]);
 
   const total = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
+  const selectedMethodObj = savedMethods.find(m => m.id === selectedSaved);
 
   const formatPrice = (p) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(p);
@@ -305,115 +306,142 @@ const Checkout = () => {
                   </div>
                 )}
 
-                {/* Method Tabs */}
-                <div className="grid grid-cols-3 gap-3">
-                  {PAYMENT_METHODS.map(m => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        setPaymentMethod(m.id);
-                        if (selectedSaved) {
-                           setSelectedSaved(null);
-                           setFormData({ accountNumber: '', provider: m.id === 'bank' ? 'BCA' : m.id === 'wallet' ? 'GoPay' : 'Visa' });
-                        }
-                      }}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                        paymentMethod === m.id
-                          ? 'bg-primary-container border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] translate-x-[-2px] translate-y-[-2px]'
-                          : 'border-on-surface/30 hover:border-on-surface'
-                      }`}
-                    >
-                      <Icon name={m.icon} className="w-7 h-7" />
-                      <span className="font-label-bold text-xs">{m.label}</span>
-                    </button>
-                  ))}
-                </div>
+                {selectedSaved && selectedMethodObj ? (
+                  /* Read-only view for selected saved payment method */
+                  <div className="bg-[#E6F4EA] border-2 border-on-surface p-6 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-lg bg-white border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <Icon name={selectedMethodObj.type === 'bank' ? 'account_balance' : selectedMethodObj.type === 'card' ? 'credit_card' : 'payments'} className="w-6 h-6 text-on-surface" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-[10px] font-black uppercase text-on-surface-variant leading-none mb-1">Metode Tersimpan ({selectedMethodObj.type === 'bank' ? 'Bank Transfer' : selectedMethodObj.type === 'card' ? 'Kartu Kredit' : 'E-Wallet'})</p>
+                        <h3 className="font-headline-md text-lg text-on-surface font-black">{selectedMethodObj.provider}</h3>
+                        <p className="font-mono text-sm text-on-surface font-bold mt-0.5">
+                          {selectedMethodObj.type === 'card' ? `•••• •••• •••• ${selectedMethodObj.account_number.slice(-4)}` : selectedMethodObj.account_number}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block text-[9px] font-black uppercase bg-primary text-white border border-on-surface px-2.5 py-1 rounded shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                        Terpilih & Terverifikasi
+                      </span>
+                      <p className="text-[9px] font-bold text-on-surface-variant mt-2 italic">Ubah metode di Pengaturan</p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Full interactive method selector & details forms when adding a new method */
+                  <>
+                    {/* Method Tabs */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {PAYMENT_METHODS.map(m => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            setPaymentMethod(m.id);
+                            if (selectedSaved) {
+                               setSelectedSaved(null);
+                               setFormData({ accountNumber: '', provider: m.id === 'bank' ? 'BCA' : m.id === 'wallet' ? 'GoPay' : 'Visa' });
+                            }
+                          }}
+                          className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                            paymentMethod === m.id
+                              ? 'bg-primary-container border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] translate-x-[-2px] translate-y-[-2px]'
+                              : 'border-on-surface/30 hover:border-on-surface'
+                          }`}
+                        >
+                          <Icon name={m.icon} className="w-7 h-7" />
+                          <span className="font-label-bold text-xs">{m.label}</span>
+                        </button>
+                      ))}
+                    </div>
 
-                {/* Method Detail */}
-                <div className="bg-surface-container-lowest border-2 border-on-surface p-5 rounded-xl">
-                  {paymentMethod === 'bank' && (
-                    <div className="space-y-3">
-                      <p className="text-xs font-black uppercase text-on-surface-variant mb-3">Pilih Bank:</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {['BCA', 'Mandiri', 'BNI', 'BRI'].map(bank => (
-                          <label key={bank} className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${formData.provider === bank ? 'border-on-surface bg-primary-container' : 'border-on-surface/20'}`}>
+                    {/* Method Detail */}
+                    <div className="bg-surface-container-lowest border-2 border-on-surface p-5 rounded-xl">
+                      {paymentMethod === 'bank' && (
+                        <div className="space-y-3">
+                          <p className="text-xs font-black uppercase text-on-surface-variant mb-3">Pilih Bank:</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {['BCA', 'Mandiri', 'BNI', 'BRI'].map(bank => (
+                              <label key={bank} className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${formData.provider === bank ? 'border-on-surface bg-primary-container' : 'border-on-surface/20'}`}>
+                                <input 
+                                  type="radio" 
+                                  name="bank" 
+                                  checked={formData.provider === bank}
+                                  onChange={() => setFormData({ ...formData, provider: bank })}
+                                  className="accent-primary" 
+                                />
+                                <span className="font-label-bold text-sm">{bank}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="mt-3">
+                            <label className="block text-xs font-black uppercase mb-1">Nomor Virtual Account / Rekening</label>
                             <input 
-                              type="radio" 
-                              name="bank" 
-                              checked={formData.provider === bank}
-                              onChange={() => setFormData({ ...formData, provider: bank })}
-                              className="accent-primary" 
+                              type="text" 
+                              placeholder="Masukkan nomor..." 
+                              value={formData.accountNumber}
+                              onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                              className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
                             />
-                            <span className="font-label-bold text-sm">{bank}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="mt-3">
-                        <label className="block text-xs font-black uppercase mb-1">Nomor Virtual Account / Rekening</label>
-                        <input 
-                          type="text" 
-                          placeholder="Masukkan nomor..." 
-                          value={formData.accountNumber}
-                          onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                          className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {paymentMethod === 'card' && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-black uppercase mb-1">Nomor Kartu</label>
-                        <input 
-                          type="text" 
-                          placeholder="0000 0000 0000 0000" 
-                          value={formData.accountNumber}
-                          onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value, provider: 'Visa' })}
-                          className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-black uppercase mb-1">Masa Berlaku</label>
-                          <input type="text" placeholder="MM/YY" className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-black uppercase mb-1">CVV</label>
-                          <input type="text" placeholder="123" className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {paymentMethod === 'wallet' && (
-                    <div className="space-y-3">
-                      <p className="text-xs font-black uppercase text-on-surface-variant mb-3">Pilih E-Wallet:</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {['GoPay', 'OVO', 'Dana', 'ShopeePay'].map(w => (
-                          <label key={w} className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${formData.provider === w ? 'border-on-surface bg-primary-container' : 'border-on-surface/20'}`}>
+                      )}
+                      {paymentMethod === 'card' && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-xs font-black uppercase mb-1">Nomor Kartu</label>
                             <input 
-                              type="radio" 
-                              name="wallet" 
-                              checked={formData.provider === w}
-                              onChange={() => setFormData({ ...formData, provider: w })}
-                              className="accent-primary" 
+                              type="text" 
+                              placeholder="0000 0000 0000 0000" 
+                              value={formData.accountNumber}
+                              onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value, provider: 'Visa' })}
+                              className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
                             />
-                            <span className="font-label-bold text-sm">{w}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="mt-3">
-                        <label className="block text-xs font-black uppercase mb-1">Nomor Handphone</label>
-                        <input 
-                          type="text" 
-                          placeholder="08xx xxxx xxxx" 
-                          value={formData.accountNumber}
-                          onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                          className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
-                        />
-                      </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-black uppercase mb-1">Masa Berlaku</label>
+                              <input type="text" placeholder="MM/YY" className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-black uppercase mb-1">CVV</label>
+                              <input type="text" placeholder="123" className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {paymentMethod === 'wallet' && (
+                        <div className="space-y-3">
+                          <p className="text-xs font-black uppercase text-on-surface-variant mb-3">Pilih E-Wallet:</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {['GoPay', 'OVO', 'Dana', 'ShopeePay'].map(w => (
+                              <label key={w} className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${formData.provider === w ? 'border-on-surface bg-primary-container' : 'border-on-surface/20'}`}>
+                                <input 
+                                  type="radio" 
+                                  name="wallet" 
+                                  checked={formData.provider === w}
+                                  onChange={() => setFormData({ ...formData, provider: w })}
+                                  className="accent-primary" 
+                                />
+                                <span className="font-label-bold text-sm">{w}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="mt-3">
+                            <label className="block text-xs font-black uppercase mb-1">Nomor Handphone</label>
+                            <input 
+                              type="text" 
+                              placeholder="08xx xxxx xxxx" 
+                              value={formData.accountNumber}
+                              onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+                              className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
             </div>
 
