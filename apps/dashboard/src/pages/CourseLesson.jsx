@@ -3,15 +3,20 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { showToast } from '../lib/toast';
+import { useUserProfile } from '../context/UserProfileContext';
+import confetti from 'canvas-confetti';
 
 const CourseLesson = () => {
   const { courseId, lessonId } = useParams();
   const navigate = useNavigate();
+  const { profile } = useUserProfile();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lessons, setLessons] = useState([]);
   const [activeLesson, setActiveLesson] = useState(null);
   const [enrollmentProgress, setEnrollmentProgress] = useState(0);
+  const [certificate, setCertificate] = useState(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   const [showConfirmNext, setShowConfirmNext] = useState(false);
   const [codeBody, setCodeBody] = useState(
@@ -148,6 +153,15 @@ const CourseLesson = () => {
             .eq('id', enrollment.id);
         }
 
+        // Fetch certificate if it exists
+        const { data: certData } = await supabase
+          .from('certificates')
+          .select('*')
+          .eq('course_id', cleanCourseId)
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+        setCertificate(certData);
+
         // Set active lesson based on lessonId in URL or default to first
         const current = mappedLessons.find(l => l.id.toString() === lessonId) || mappedLessons[0];
         setActiveLesson(current);
@@ -169,6 +183,31 @@ const CourseLesson = () => {
     }
   }, [lessonId, lessons]);
 
+  const triggerConfetti = () => {
+    const duration = 4 * 1000;
+    const end = Date.now() + duration;
+
+    const frame = () => {
+      confetti({
+        particleCount: 6,
+        angle: 60,
+        spread: 60,
+        origin: { x: 0, y: 0.8 }
+      });
+      confetti({
+        particleCount: 6,
+        angle: 120,
+        spread: 60,
+        origin: { x: 1, y: 0.8 }
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+    frame();
+  };
+
   const handleToggleLessonCompleted = async (lessonToToggle) => {
     const updated = lessons.map(l => {
       if (l.id === lessonToToggle.id) {
@@ -185,6 +224,7 @@ const CourseLesson = () => {
 
     const completedCount = updated.filter(l => l.completed).length;
     const newProgress = updated.length > 0 ? Math.round((completedCount / updated.length) * 100) : 0;
+    const prevProgress = enrollmentProgress;
     setEnrollmentProgress(newProgress);
 
     console.log("--- CourseLesson: handleToggleLessonCompleted ---");
@@ -232,9 +272,93 @@ const CourseLesson = () => {
           console.error("Error updating enrollment progress in database:", enrollErr);
         } else {
           showToast(`Progress belajar diperbarui menjadi ${newProgress}%!`);
+          if (newProgress === 100 && prevProgress < 100) {
+            triggerConfetti();
+            setShowCompletionModal(true);
+          }
         }
       }
     }
+  };
+
+  const handlePrintCertificate = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=650');
+    const formattedDate = new Date(certificate?.issued_at || new Date()).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    const studentName = profile?.fullName || "Pelajar Premium";
+    const courseTitle = course?.title || "Kelas AiLearning";
+    const certId = certificate?.id ? `CERT-${certificate.id}` : `CERT-${courseId}-${profile?.id?.slice(0, 8).toUpperCase()}`;
+
+    const content = certificate?.certificate_url ? `
+      <div style="display:flex; justify-content:center; align-items:center; height:100vh; margin:0; padding:0; box-sizing:border-box; background:#1e293b;">
+        <img src="${certificate.certificate_url}" style="max-width:100%; max-height:100%; object-fit:contain; border: 8px solid #000; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);" />
+      </div>
+    ` : `
+      <div style="font-family:'Outfit', 'Inter', sans-serif; display:flex; justify-content:center; align-items:center; min-height:98vh; background:#fefefe; padding:20px; box-sizing:border-box;">
+        <div style="width:100%; max-width:800px; border:10px double #000; padding:40px; background:#fffcf5; text-align:center; position:relative; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+          <div style="position:absolute; top:15px; left:15px; width:40px; height:40px; border-top:4px solid #000; border-left:4px solid #000;"></div>
+          <div style="position:absolute; top:15px; right:15px; width:40px; height:40px; border-top:4px solid #000; border-right:4px solid #000;"></div>
+          <div style="position:absolute; bottom:15px; left:15px; width:40px; height:40px; border-bottom:4px solid #000; border-left:4px solid #000;"></div>
+          <div style="position:absolute; bottom:15px; right:15px; width:40px; height:40px; border-bottom:4px solid #000; border-right:4px solid #000;"></div>
+          
+          <div style="font-size:24px; font-weight:900; letter-spacing:4px; margin-bottom:20px; text-transform:uppercase;">AiLearning Academy</div>
+          <div style="font-size:38px; font-weight:900; color:#000; text-transform:uppercase; margin-bottom:30px; border-bottom:4px solid #000; display:inline-block; padding-bottom:10px; letter-spacing:1px;">SERTIFIKAT KELULUSAN</div>
+          
+          <div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Diberikan Kepada</div>
+          <div style="font-size:34px; font-weight:900; color:#000; text-decoration:underline; text-transform:capitalize; margin-bottom:25px; font-style:italic;">${studentName}</div>
+          
+          <div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Atas Keberhasilannya Menyelesaikan Kelas</div>
+          <div style="font-size:26px; font-weight:900; color:#2563eb; margin-bottom:40px; line-height:1.3;">${courseTitle}</div>
+          
+          <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:50px; padding:0 30px;">
+            <div style="text-align:left;">
+              <div style="font-size:12px; font-weight:700; color:#6b7280; text-transform:uppercase;">Tanggal Kelulusan</div>
+              <div style="font-size:15px; font-weight:900; color:#000; margin-top:5px;">${formattedDate}</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="width:120px; height:2px; background:#000; margin-bottom:8px;"></div>
+              <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:#000;">Harin AI System</div>
+              <div style="font-size:10px; font-weight:700; color:#6b7280;">Verifikasi Resmi</div>
+            </div>
+          </div>
+          
+          <div style="margin-top:40px; font-size:10px; font-weight:700; color:#9ca3af; letter-spacing:1px;">ID Verifikasi: ${certId}</div>
+        </div>
+      </div>
+    `;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Sertifikat Kelulusan - ${studentName}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+          <style>
+            body { margin: 0; padding: 0; background-color: #ffffff; }
+            @media print {
+              body { background: none; }
+              @page { size: landscape; margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          ${content}
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const goToNextLesson = () => {
@@ -439,6 +563,18 @@ const CourseLesson = () => {
             <div className="w-full bg-white border-2 border-on-background rounded-full h-3 overflow-hidden">
               <div className="bg-primary h-full transition-all" style={{ width: `${enrollmentProgress}%` }} />
             </div>
+            {enrollmentProgress === 100 && (
+              <button 
+                onClick={() => {
+                  triggerConfetti();
+                  setShowCompletionModal(true);
+                }}
+                className="mt-2.5 w-full py-2 bg-[#FFB800] hover:bg-[#e6a500] text-on-background border-2 border-on-background rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all cursor-pointer"
+              >
+                <Icon name="workspace_premium" className="w-4 h-4" />
+                Lihat Sertifikat
+              </button>
+            )}
           </div>
         </div>
 
@@ -761,6 +897,94 @@ const CourseLesson = () => {
                 className="flex-1 px-5 py-3 bg-surface-container text-on-surface font-headline-md rounded-lg border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all text-center"
               >
                 Belum Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Neobrutalist Completion & Certificate Modal ── */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 overflow-y-auto backdrop-blur-sm">
+          <div className="bg-white border-4 border-on-background rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-200 flex flex-col items-center gap-6 relative">
+            <button 
+              onClick={() => setShowCompletionModal(false)}
+              className="absolute top-4 right-4 p-1.5 hover:bg-surface-variant rounded-lg transition-colors border-2 border-on-background bg-white"
+            >
+              <Icon name="close" className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-1">
+              <div className="text-5xl animate-bounce">🏆</div>
+              <h3 className="font-headline-lg text-3xl font-black text-on-surface">KURSUS SELESAI!</h3>
+              <p className="text-on-surface-variant font-bold text-sm">
+                Selamat! Anda telah menyelesaikan semua modul dalam kelas ini dengan sukses.
+              </p>
+            </div>
+
+            {certificate?.certificate_url ? (
+              <div className="w-full border-4 border-on-background rounded-2xl overflow-hidden bg-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative group">
+                <img 
+                  src={certificate.certificate_url} 
+                  alt="Sertifikat Kelulusan Resmi" 
+                  className="w-full h-auto max-h-[350px] object-contain mx-auto" 
+                />
+              </div>
+            ) : (
+              <div className="w-full border-4 border-double border-on-background p-6 md:p-8 rounded-2xl bg-[#fffcf5] relative overflow-hidden flex flex-col items-center justify-center text-center text-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                {/* Decorative vintage borders */}
+                <div className="absolute top-3 left-3 w-8 h-8 border-t-4 border-l-4 border-on-background" />
+                <div className="absolute top-3 right-3 w-8 h-8 border-t-4 border-r-4 border-on-background" />
+                <div className="absolute bottom-3 left-3 w-8 h-8 border-b-4 border-l-4 border-on-background" />
+                <div className="absolute bottom-3 right-3 w-8 h-8 border-b-4 border-r-4 border-on-background" />
+                
+                <p className="text-[10px] font-black tracking-[4px] uppercase text-on-surface-variant/80 mb-2">AiLearning Academy</p>
+                <h4 className="text-2xl md:text-3xl font-black text-on-surface uppercase tracking-wider border-b-4 border-on-background pb-1 mb-5">Sertifikat Kelulusan</h4>
+                
+                <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Diberikan Kepada</p>
+                <p className="text-3xl font-black text-primary underline decoration-2 underline-offset-4 italic capitalize mb-5">{profile?.fullName || "Pelajar Premium"}</p>
+                
+                <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Atas Keberhasilannya Menyelesaikan Kelas</p>
+                <p className="text-base md:text-lg font-black text-on-surface leading-tight max-w-md mb-8">{course?.title}</p>
+                
+                <div className="flex justify-between items-end w-full px-4 md:px-8">
+                  <div className="text-left">
+                    <span className="text-[9px] font-bold text-on-surface-variant uppercase block">Tanggal Kelulusan</span>
+                    <span className="text-sm font-black text-on-surface">
+                      {new Date(certificate?.issued_at || new Date()).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="w-20 h-0.5 bg-on-background mb-1.5 mx-auto" />
+                    <span className="text-[10px] font-black uppercase text-on-surface block">Harin AI System</span>
+                    <span className="text-[8px] font-bold text-on-surface-variant block">Verifikasi Resmi</span>
+                  </div>
+                </div>
+                
+                <p className="text-[8px] font-bold text-on-surface-variant/50 mt-6 tracking-wider">
+                  ID Verifikasi: {certificate?.id ? `CERT-${certificate.id}` : `CERT-${courseId}-${profile?.id?.slice(0, 8).toUpperCase()}`}
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              <button 
+                onClick={handlePrintCertificate}
+                className="flex-1 py-3 px-4 bg-primary text-white font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Icon name="print" className="w-5 h-5" />
+                Cetak / Simpan PDF
+              </button>
+              <button 
+                onClick={() => setShowCompletionModal(false)}
+                className="flex-1 py-3 px-4 bg-surface-container text-on-surface font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all cursor-pointer"
+              >
+                Tutup
               </button>
             </div>
           </div>
