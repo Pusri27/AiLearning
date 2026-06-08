@@ -12,6 +12,7 @@ export const UserProfileProvider = ({ children }) => {
     role: 'student',
     friend_code: '',
     isGuest: false,
+    language: localStorage.getItem('harin_content_language') || 'id',
   });
 
   const loadProfile = async (userId, email) => {
@@ -31,6 +32,7 @@ export const UserProfileProvider = ({ children }) => {
         friendCode: data.friend_code || '',
         email:     email           || '',
         isGuest:   false,
+        language:  localStorage.getItem('harin_content_language') || 'id',
       });
     }
   };
@@ -44,6 +46,7 @@ export const UserProfileProvider = ({ children }) => {
       email: '',
       role: 'student',
       isGuest: true,
+      language: localStorage.getItem('harin_content_language') || 'id',
     });
   };
 
@@ -59,6 +62,7 @@ export const UserProfileProvider = ({ children }) => {
       role: 'student',
       friendCode: '',
       isGuest: false,
+      language: localStorage.getItem('harin_content_language') || 'id',
     });
     // Fire signOut in background — no await needed
     supabase.auth.signOut();
@@ -95,6 +99,9 @@ export const UserProfileProvider = ({ children }) => {
 
   // Called from Settings after a successful save
   const updateProfile = (updates) => {
+    if (updates.language !== undefined) {
+      localStorage.setItem('harin_content_language', updates.language);
+    }
     setProfile(prev => ({ ...prev, ...updates }));
   };
 

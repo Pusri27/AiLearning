@@ -15,6 +15,8 @@ import {
   PauseIcon
 } from './Icons';
 
+import { getTranslation } from '../lib/i18n';
+
 const getMoodIcon = (iconName, className) => {
   switch (iconName) {
     case 'music': return <MusicIcon className={className} />;
@@ -39,16 +41,17 @@ const Sidebar = () => {
   const music     = useMusicPlayerSafe();
   const { profile, logout } = useUserProfile();
   const isGuest   = profile.isGuest;
+  const t         = (key) => getTranslation(profile.language || 'id', key);
 
   const navItems = [
-    { to: '/',            iconName: 'dashboard',         label: 'Dashboard'    },
-    { to: '/catalog',     iconName: 'search',            label: 'Catalog'      },
-    { to: '/study',       iconName: 'music_note',        label: 'Study Space'  },
-    { to: '/achievements',iconName: 'workspace_premium', label: 'Achievements', hidden: isGuest },
-    { to: '/community',    iconName: 'groups',            label: 'Community'    },
-    { to: '/courses',     iconName: 'school',            label: 'My Courses',   hidden: isGuest },
-    { to: '/cart',        iconName: 'shopping_cart',     label: 'Cart'         },
-    { to: '/blog',        iconName: 'article',           label: 'Blog Feed'    },
+    { to: '/',            iconName: 'dashboard',         label: t('dashboard')    },
+    { to: '/catalog',     iconName: 'search',            label: t('catalog')      },
+    { to: '/study',       iconName: 'music_note',        label: t('studySpace')  },
+    { to: '/achievements',iconName: 'workspace_premium', label: t('achievements'), hidden: isGuest },
+    { to: '/community',    iconName: 'groups',            label: t('community')    },
+    { to: '/courses',     iconName: 'school',            label: t('myCourses'),   hidden: isGuest },
+    { to: '/cart',        iconName: 'shopping_cart',     label: t('cart')         },
+    { to: '/blog',        iconName: 'article',           label: t('blogFeed')    },
   ];
 
   const onStudyPage = location.pathname === '/study';
@@ -59,7 +62,7 @@ const Sidebar = () => {
       {/* Brand Logo */}
       <div className="mb-10 px-2 cursor-pointer" onClick={() => navigate('/')}>
         <h1 className="font-headline-md text-headline-md font-black text-primary mb-1 tracking-tighter">Harin Learning</h1>
-        <p className="font-label-bold text-label-bold text-secondary">{isGuest ? 'Guest Mode' : 'Student Portal'}</p>
+        <p className="font-label-bold text-label-bold text-secondary">{isGuest ? t('guestMode') : t('studentPortal')}</p>
       </div>
 
       {/* Main Navigation */}
@@ -223,7 +226,7 @@ const Sidebar = () => {
               className="w-full bg-secondary text-on-secondary brutal-border shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg py-3 px-4 font-label-bold flex items-center justify-center gap-2 hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0 active:translate-y-0 active:shadow-none"
             >
               <Icon name="bolt" className="w-5 h-5 shrink-0" />
-              Upgrade to Pro
+              {t('upgradeToPro')}
             </button>
             <div className="space-y-1">
               <NavLink
@@ -237,14 +240,14 @@ const Sidebar = () => {
                 }
               >
                 <Icon name="help" className="w-6 h-6 shrink-0" />
-                <span className="font-label-bold">Help</span>
+                <span className="font-label-bold">{t('help')}</span>
               </NavLink>
               <button
                 onClick={logout}
                 className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-error/10 text-error transition-all"
               >
                 <Icon name="logout" className="w-6 h-6 shrink-0" />
-                <span className="font-label-bold">Logout</span>
+                <span className="font-label-bold">{t('logout')}</span>
               </button>
             </div>
           </>

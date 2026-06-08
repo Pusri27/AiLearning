@@ -5,11 +5,15 @@ import { supabase } from '../lib/supabaseClient';
 import { showToast } from '../lib/toast';
 import { useUserProfile } from '../context/UserProfileContext';
 import confetti from 'canvas-confetti';
+import { getTranslation } from '../lib/i18n';
+import { courseService } from '../lib/courseService';
 
 const CourseLesson = () => {
   const { courseId, lessonId } = useParams();
   const navigate = useNavigate();
   const { profile } = useUserProfile();
+  const t = (key) => getTranslation(profile.language || 'id', key);
+
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lessons, setLessons] = useState([]);
@@ -27,6 +31,11 @@ const CourseLesson = () => {
   const [submission, setSubmission] = useState(null);
   const [submissionFile, setSubmissionFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [translatedTitle, setTranslatedTitle] = useState('');
+  const [translatedContent, setTranslatedContent] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isTranslationActive, setIsTranslationActive] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const getEmbedUrl = (url) => {
@@ -97,6 +106,52 @@ const CourseLesson = () => {
     };
     fetchSubmission();
   }, [activeLesson]);
+
+  // Reset translation when activeLesson or profile language changes
+  useEffect(() => {
+    setIsTranslationActive(false);
+    setTranslatedTitle('');
+    setTranslatedContent('');
+  }, [activeLesson, profile.language]);
+
+  const handleTranslateClick = async () => {
+    if (isTranslationActive) {
+      setIsTranslationActive(false);
+      return;
+    }
+    
+    if (translatedTitle && translatedContent) {
+      setIsTranslationActive(true);
+      return;
+    }
+    
+    setIsTranslating(true);
+    try {
+      const targetLang = profile.language || 'id';
+      const result = await courseService.translateContent(
+        activeLesson.title,
+        activeLesson.assignment_text || activeLesson.content || '',
+        targetLang
+      );
+      setTranslatedTitle(result.title);
+      setTranslatedContent(result.content);
+      setIsTranslationActive(true);
+      showToast(
+        targetLang === 'en'
+          ? "Translated with Harin AI! ✦"
+          : targetLang === 'ja'
+          ? "Harin AIで翻訳しました！ ✦"
+          : targetLang === 'zh'
+          ? "已通过 Harin AI 翻译！ ✦"
+          : "Berhasil diterjemahkan dengan Harin AI! ✦"
+      );
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal menerjemahkan konten. Coba lagi.", "error");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   // 1. Fetch Course, Syllabus & Enrollment details dynamically
   useEffect(() => {
@@ -663,9 +718,28 @@ const CourseLesson = () => {
         <header className="h-16 bg-surface border-b-2 border-on-background shadow-[0px_2px_0px_0px_rgba(0,0,0,1)] flex items-center px-6 justify-between shrink-0">
           <div className="flex items-center gap-3">
             <Icon name="menu_book" className="w-6 h-6 text-primary" />
-            <h1 className="font-headline-md font-black text-on-surface truncate">{activeLesson.title}</h1>
+            <h1 className="font-headline-md font-black text-on-surface truncate">
+              {isTranslationActive && translatedTitle ? translatedTitle : activeLesson.title}
+            </h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTranslateClick}
+              disabled={isTranslating}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border-2 border-on-background rounded-lg font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all disabled:opacity-50 hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none ${
+                isTranslationActive
+                  ? 'bg-primary text-white'
+                  : 'bg-primary-container text-on-surface'
+              }`}
+            >
+              <Icon name="auto_awesome" className={`w-4 h-4 ${isTranslating ? 'animate-spin' : ''}`} />
+              {isTranslating
+                ? (profile.language === 'en' ? 'Translating...' : profile.language === 'ja' ? '翻訳中...' : profile.language === 'zh' ? '翻译中...' : 'Menerjemahkan...')
+                : isTranslationActive
+                ? (profile.language === 'en' ? 'Show Original' : profile.language === 'ja' ? '原文を表示' : profile.language === 'zh' ? '显示原文' : 'Tampilkan Asli')
+                : (profile.language === 'en' ? 'Translate with AI' : profile.language === 'ja' ? 'AI de Honyaku' : profile.language === 'zh' ? 'AI 翻译' : 'Terjemahkan (AI)')
+              }
+            </button>
             <button 
               onClick={handlePrevLesson}
               disabled={lessons.findIndex(l => l.id === activeLesson.id) === 0}
@@ -744,7 +818,9 @@ const CourseLesson = () => {
 
               <div className="bg-white border-2 border-on-background p-4 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] mt-2">
                 <span className="text-[10px] uppercase font-black tracking-widest text-on-surface-variant/80 block mb-2">PANDUAN TUGAS</span>
-                <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">{activeLesson.assignment_text || activeLesson.content || 'Silakan ikuti instruksi yang diberikan.'}</p>
+                <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">
+                  {isTranslationActive && translatedContent ? translatedContent : activeLesson.assignment_text || activeLesson.content || 'Silakan ikuti instruksi yang diberikan.'}
+                </p>
               </div>
 
               <div className="bg-white border-2 border-on-background p-6 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] mt-2">
@@ -872,9 +948,13 @@ const CourseLesson = () => {
           {/* Text Content */}
           {activeLesson.type !== 'assignment' && (
             <div className="bg-white border-2 border-on-background rounded-xl p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <h3 className="font-headline-md text-2xl mb-6">Materi: {activeLesson.title}</h3>
+              <h3 className="font-headline-md text-2xl mb-6">
+                Materi: {isTranslationActive && translatedTitle ? translatedTitle : activeLesson.title}
+              </h3>
               <div className="prose max-w-none text-on-surface-variant font-body-md space-y-4 text-lg">
-                <p className="leading-relaxed whitespace-pre-wrap">{activeLesson.content || 'Tidak ada deskripsi materi tambahan.'}</p>
+                <p className="leading-relaxed whitespace-pre-wrap">
+                  {isTranslationActive && translatedContent ? translatedContent : activeLesson.content || 'Tidak ada deskripsi materi tambahan.'}
+                </p>
               </div>
             </div>
           )}

@@ -4,8 +4,63 @@ const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
 const AI_MODEL = import.meta.env.VITE_AI_MODEL || "nvidia/nemotron-3-super-120b-a12b:free";
 
 export const courseService = {
+  // --- AI Translation ---
+  translateContent: async (title, content, targetLanguage) => {
+    const langName = targetLanguage === 'en' ? 'English (US)' : targetLanguage === 'ja' ? 'Japanese (日本語)' : targetLanguage === 'zh' ? 'Chinese (中文)' : 'Bahasa Indonesia';
+    const prompt = `
+      You are a professional translator for "Harin Learning".
+      Translate the following course lesson title and lesson content into ${langName}.
+      
+      Maintain original markdown structure and meaning. Keep formatting clean.
+      Do not add extra conversational replies like "Here is your translation:".
+      
+      Output format:
+      [TITLE]
+      (Translated Title)
+      [CONTENT]
+      (Translated Content)
+      
+      ---
+      TITLE: ${title}
+      CONTENT: ${content}
+    `;
+
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          "model": AI_MODEL,
+          "messages": [
+            { "role": "system", "content": "You are a professional educational translator." },
+            { "role": "user", "content": prompt }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      const rawText = data.choices[0].message.content;
+      
+      // Parse [TITLE] and [CONTENT]
+      const titleMatch = rawText.match(/\\[TITLE\\]\\n([\\s\\S]*?)\\n\\[CONTENT\\]/i) || rawText.match(/\\[TITLE\\]([\\s\\S]*?)\\[CONTENT\\]/i);
+      const contentMatch = rawText.match(/\\[CONTENT\\]\\n([\\s\\S]*)/i) || rawText.match(/\\[CONTENT\\]([\\s\\S]*)/i);
+      
+      return {
+        title: titleMatch ? titleMatch[1].trim() : title,
+        content: contentMatch ? contentMatch[1].trim() : rawText
+      };
+    } catch (error) {
+      console.error("Translation Error:", error);
+      throw new Error("Gagal menerjemahkan konten dengan AI.");
+    }
+  },
+
   // --- AI Optimization ---
-  optimizeMaterial: async (content, userContext = '') => {
+  optimizeMaterial: async (content, userContext = '', language = 'id') => {
+    const langName = language === 'en' ? 'English (US)' : language === 'ja' ? 'Japanese (日本語)' : language === 'zh' ? 'Chinese (简体中文)' : 'Bahasa Indonesia';
     const prompt = `
       Kamu adalah AI Pengembang Kurikulum di platform "Harin Learning". 
       Tugasmu adalah membuat materi pembelajaran yang sangat compact dan bersih.
@@ -18,9 +73,10 @@ export const courseService = {
       2. JANGAN gunakan template umum seperti "Materi ini menyajikan rangkuman...". Langsung masuk ke isi materi yang relevan.
       3. JANGAN gunakan simbol Markdown (#, **, -). Gunakan HURUF KAPITAL untuk Judul/Sub-judul.
       4. STRUKTUR: Gunakan spasi dan paragraf yang jelas. Buatlah materi yang "siap baca" bagi siswa.
-      5. Jika konteksnya tentang hobi, sains, atau astrologi, sesuaikan bahasanya agar menarik namun tetap edukatif.
+      5. BAHASA MATERI: Materi HARUS ditulis dalam ${langName}.
+      6. Jika konteksnya tentang hobi, sains, atau astrologi, sesuaikan bahasanya agar menarik namun tetap edukatif.
       
-      HASIL MATERI (Berikan isi spesifik sesuai topik):
+      HASIL MATERI (Berikan isi spesifik sesuai topik dalam ${langName}):
     `;
 
     try {

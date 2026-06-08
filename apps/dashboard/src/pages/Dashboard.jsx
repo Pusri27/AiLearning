@@ -6,13 +6,14 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { showToast } from '../lib/toast';
-
 import { useUserProfile } from '../context/UserProfileContext';
+import { getTranslation } from '../lib/i18n';
 import { HaiIcon, CheckIcon } from '../components/Icons';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { profile } = useUserProfile();
+  const t = (key) => getTranslation(profile.language || 'id', key);
   const isGuest = profile.isGuest;
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [recentPosts, setRecentPosts] = useState([]);
@@ -102,17 +103,73 @@ const Dashboard = () => {
 
   const formatDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 
+  const lang = profile.language || 'id';
+
+  const welcomeTitle = {
+    id: `Selamat Datang, ${profile.fullName?.split(' ')[0] || 'Pelajar'}!`,
+    en: `Welcome, ${profile.fullName?.split(' ')[0] || 'Learner'}!`,
+    ja: `ようこそ、${profile.fullName?.split(' ')[0] || '受講生'}さん！`,
+    zh: `欢迎您，${profile.fullName?.split(' ')[0] || '学员'}！`
+  }[lang] || `Selamat Datang, ${profile.fullName?.split(' ')[0] || 'Pelajar'}!`;
+
+  const welcomeSub = enrolledCourses.length > 0 
+    ? {
+        id: `Kamu terdaftar di ${enrolledCourses.length} kursus dengan rata-rata progress ${totalProgress}%. Terus semangat!`,
+        en: `You are enrolled in ${enrolledCourses.length} courses with an average progress of ${totalProgress}%. Keep it up!`,
+        ja: `現在、${enrolledCourses.length}個のコースに登録されており、平均進捗率は${totalProgress}%です。その調子で頑張りましょう！`,
+        zh: `您已注册 ${enrolledCourses.length} 门课程，平均进度为 ${totalProgress}%。继续加油！`
+      }[lang]
+    : {
+        id: 'Mulai petualangan belajarmu dengan memilih kursus pertamamu sekarang.',
+        en: 'Start your learning journey by choosing your first course now.',
+        ja: '最初のコースを選択して、今すぐ学習の旅を始めましょう。',
+        zh: '现在就选择您的第一门课程，开启您的学习之旅吧。'
+      }[lang];
+
+  const btnText = enrolledCourses.length > 0
+    ? { id: 'Lanjut Belajar', en: 'Continue Learning', ja: '学習を続ける', zh: '继续学习' }[lang]
+    : { id: 'Mulai Sekarang', en: 'Get Started', ja: '今すぐ始める', zh: '立即开始' }[lang];
+
+  const activeCoursesLabel = { id: 'Kursus Aktif', en: 'Active Courses', ja: '進行中のコース', zh: '进行中的课程' }[lang];
+  const seeAllLabel = { id: 'Lihat Semua', en: 'See All', ja: 'すべて見る', zh: '查看全部' }[lang];
+
+  const emptyActiveTitle = { id: 'Belum ada kursus aktif', en: 'No active courses yet', ja: 'アクティブなコースはありません', zh: '暂无进行中的课程' }[lang];
+  const emptyActiveDesc = { id: 'Mulai petualangan belajarmu dari katalog.', en: 'Start your learning journey from the catalog.', ja: 'カタログから学習を始めましょう。', zh: '从课程目录开启您的学习之旅。' }[lang];
+  const openCatalogLabel = { id: 'Buka Katalog', en: 'Open Catalog', ja: 'カタログを開く', zh: '浏览目录' }[lang];
+
+  const recentArticlesLabel = { id: 'Artikel Terbaru', en: 'Recent Articles', ja: '最新記事', zh: '最新文章' }[lang];
+  const summaryLabel = { id: 'Ringkasan', en: 'Summary', ja: '概要', zh: '数据统计' }[lang];
+
+  const statLabels = {
+    enrolled: { id: 'Kursus Terdaftar', en: 'Enrolled Courses', ja: '登録コース', zh: '已注册课程' }[lang],
+    completed: { id: 'Kursus Selesai', en: 'Completed Courses', ja: '修了コース', zh: '已完成课程' }[lang],
+    articles: { id: 'Artikel Dibaca', en: 'Articles Read', ja: '読んだ記事', zh: '已读文章' }[lang]
+  };
+
+  const quickActionsLabel = { id: 'Aksi Cepat', en: 'Quick Actions', ja: 'クイックアクション', zh: '快捷操作' }[lang];
+  const quickActions = [
+    { label: { id: 'Tulis Artikel', en: 'Write Article', ja: '記事を書く', zh: '撰写文章' }[lang],  icon: 'edit',   path: '/write',   bg: 'bg-secondary-fixed'  },
+    { label: { id: 'Study Space',    en: 'Study Space',    ja: '学習スペース', zh: '学习空间' }[lang],    icon: 'music_note', path: '/study', bg: 'bg-primary-container' },
+    { label: { id: 'Pencapaian',  en: 'Achievements',  ja: '実績', zh: '学习成就' }[lang],  icon: 'workspace_premium',  path: '/achievements', bg: 'bg-surface' },
+  ];
+
+  const courseProgressLabels = {
+    notStarted: { id: 'Belum dimulai', en: 'Not started', ja: '未着手', zh: '未开始' }[lang],
+    completed: { id: 'Selesai', en: 'Completed', ja: '完了', zh: '已完成' }[lang],
+    inProgress: { id: 'Sedang berjalan', en: 'In progress', ja: '進行中', zh: '进行中' }[lang]
+  };
+
   return (
     <div className="flex h-screen bg-background text-on-surface overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <header className="flex justify-between items-center px-6 md:px-margin-desktop h-20 w-full bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] z-[50] sticky top-0 shrink-0">
-          <h2 className="font-headline-md font-extrabold text-on-surface">Dashboard</h2>
+          <h2 className="font-headline-md font-extrabold text-on-surface">{t('dashboard')}</h2>
           <div className="flex items-center gap-4">
             <div className="hidden md:flex items-center bg-white border-2 border-on-surface px-3 py-2 w-56 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg">
               <Icon name="search" className="w-4 h-4 text-on-surface-variant shrink-0 mr-2" />
-              <input className="border-none focus:ring-0 p-0 text-sm w-full bg-transparent" placeholder="Cari kursus..." type="text" />
+              <input className="border-none focus:ring-0 p-0 text-sm w-full bg-transparent" placeholder={t('searchCourses')} type="text" />
             </div>
             <NotificationDropdown />
             <ProfileDropdown />
@@ -124,18 +181,16 @@ const Dashboard = () => {
           <section className="mb-8 relative overflow-hidden bg-primary-container border-2 border-on-surface p-8 md:p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row justify-between items-center gap-6 rounded-xl">
             <div className="max-w-xl relative z-10">
               <h2 className="font-headline-xl font-black mb-3 text-on-surface">
-                Selamat Datang, {profile.fullName?.split(' ')[0] || 'Pelajar'}! <HaiIcon className="inline-block w-8 h-8 md:w-10 md:h-10 ml-2 text-on-surface hover:scale-110 transition-transform cursor-pointer" />
+                {welcomeTitle} <HaiIcon className="inline-block w-8 h-8 md:w-10 md:h-10 ml-2 text-on-surface hover:scale-110 transition-transform cursor-pointer" />
               </h2>
               <p className="font-body-lg text-on-surface-variant mb-6">
-                {enrolledCourses.length > 0
-                  ? `Kamu terdaftar di ${enrolledCourses.length} kursus dengan rata-rata progress ${totalProgress}%. Terus semangat!`
-                  : 'Mulai petualangan belajarmu dengan memilih kursus pertamamu sekarang.'}
+                {welcomeSub}
               </p>
               <button
                 onClick={() => navigate(enrolledCourses.length > 0 ? '/courses' : '/catalog')}
                 className="px-8 py-3 bg-on-surface text-white font-headline-md border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] hover:translate-x-[-4px] hover:translate-y-[-4px] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)] transition-all rounded-xl"
               >
-                {enrolledCourses.length > 0 ? 'Lanjut Belajar' : 'Mulai Sekarang'}
+                {btnText}
               </button>
             </div>
             {/* Decorative progress ring */}
@@ -162,9 +217,9 @@ const Dashboard = () => {
             {/* Left: Enrolled Courses */}
             <div className="lg:col-span-8 space-y-6">
               <div className="flex justify-between items-center">
-                <h3 className="font-headline-lg text-on-surface">Kursus Aktif</h3>
+                <h3 className="font-headline-lg text-on-surface">{activeCoursesLabel}</h3>
                 <button onClick={() => navigate('/courses')} className="text-primary font-label-bold text-sm hover:underline flex items-center gap-1">
-                  Lihat Semua <Icon name="arrow_forward" className="w-4 h-4" />
+                  {seeAllLabel} <Icon name="arrow_forward" className="w-4 h-4" />
                 </button>
               </div>
 
@@ -201,7 +256,7 @@ const Dashboard = () => {
                             <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${course.progress}%` }} />
                           </div>
                           <p className="text-xs text-on-surface-variant mt-1.5">
-                            {course.progress === 0 ? 'Belum dimulai' : course.progress >= 100 ? <span className="flex items-center gap-1"><CheckIcon className="w-4 h-4 text-green-600" /> Selesai</span> : 'Sedang berjalan'}
+                            {course.progress === 0 ? courseProgressLabels.notStarted : course.progress >= 100 ? <span className="flex items-center gap-1"><CheckIcon className="w-4 h-4 text-green-600" /> {courseProgressLabels.completed}</span> : courseProgressLabels.inProgress}
                           </p>
                         </div>
                       </div>
@@ -211,10 +266,10 @@ const Dashboard = () => {
               ) : (
                 <div className="py-12 px-6 border-4 border-dashed border-on-surface bg-surface rounded-2xl text-center">
                   <Icon name="school" className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                  <h4 className="font-headline-md text-xl mb-2">Belum ada kursus aktif</h4>
-                  <p className="text-on-surface-variant mb-6">Mulai petualangan belajarmu dari katalog.</p>
+                  <h4 className="font-headline-md text-xl mb-2">{emptyActiveTitle}</h4>
+                  <p className="text-on-surface-variant mb-6">{emptyActiveDesc}</p>
                   <button onClick={() => navigate('/catalog')} className="px-6 py-2 bg-primary text-white border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-label-bold rounded-lg">
-                    Buka Katalog
+                    {openCatalogLabel}
                   </button>
                 </div>
               )}
@@ -223,9 +278,9 @@ const Dashboard = () => {
               {recentPosts.length > 0 && (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-headline-lg text-on-surface">Artikel Terbaru</h3>
+                    <h3 className="font-headline-lg text-on-surface">{recentArticlesLabel}</h3>
                     <button onClick={() => navigate('/blog')} className="text-primary font-label-bold text-sm hover:underline flex items-center gap-1">
-                      Lihat Semua <Icon name="arrow_forward" className="w-4 h-4" />
+                      {seeAllLabel} <Icon name="arrow_forward" className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="space-y-3">
@@ -254,12 +309,12 @@ const Dashboard = () => {
             <div className="lg:col-span-4 space-y-5">
               {/* Stat Cards */}
               <div className="bg-white border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-xl">
-                <h3 className="font-headline-md mb-5 text-on-surface">Ringkasan</h3>
+                <h3 className="font-headline-md mb-5 text-on-surface">{summaryLabel}</h3>
                 <div className="space-y-4">
                   {[
-                    { label: 'Kursus Terdaftar', value: enrolledCourses.length, icon: 'school', color: 'text-primary' },
-                    { label: 'Kursus Selesai',   value: enrolledCourses.filter(c => c.progress >= 100).length, icon: 'task_alt',  color: 'text-tertiary' },
-                    { label: 'Artikel Dibaca',   value: recentPosts.length,    icon: 'article', color: 'text-secondary' },
+                    { label: statLabels.enrolled, value: enrolledCourses.length, icon: 'school', color: 'text-primary' },
+                    { label: statLabels.completed,   value: enrolledCourses.filter(c => c.progress >= 100).length, icon: 'task_alt',  color: 'text-tertiary' },
+                    { label: statLabels.articles,   value: recentPosts.length,    icon: 'article', color: 'text-secondary' },
                   ].map(stat => (
                     <div key={stat.label} className="flex items-center gap-4 p-3 border-2 border-on-surface bg-surface-container-low rounded-lg">
                       <Icon name={stat.icon} className={`w-8 h-8 ${stat.color} shrink-0`} />
@@ -274,13 +329,9 @@ const Dashboard = () => {
 
               {/* Quick Actions */}
               <div className="bg-tertiary-container border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-xl">
-                <h3 className="font-headline-md mb-4 text-on-surface">Aksi Cepat</h3>
+                <h3 className="font-headline-md mb-4 text-on-surface">{quickActionsLabel}</h3>
                 <div className="flex flex-col gap-3">
-                  {[
-                    { label: 'Tulis Artikel',  icon: 'edit',   path: '/write',   bg: 'bg-secondary-fixed'  },
-                    { label: 'Study Space',    icon: 'music_note', path: '/study', bg: 'bg-primary-container' },
-                    { label: 'Pencapaian',  icon: 'workspace_premium',  path: '/achievements', bg: 'bg-surface' },
-                  ].map(action => (
+                  {quickActions.map(action => (
                     <button
                       key={action.label}
                       onClick={() => navigate(action.path)}

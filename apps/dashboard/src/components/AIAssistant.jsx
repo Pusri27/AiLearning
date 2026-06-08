@@ -51,8 +51,28 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
   const { profile } = useUserProfile();
   const isGuest = profile.isGuest;
   const [isOpen, setIsOpen] = useState(false);
+  
+  const getLanguageName = (code) => {
+    switch (code) {
+      case 'en': return 'English (US)';
+      case 'ja': return 'Japanese (日本語)';
+      default: return 'Bahasa Indonesia';
+    }
+  };
+
+  const getWelcomeMessage = (lang, name, role) => {
+    const isTeacher = role === 'teacher';
+    if (lang === 'en') {
+      return `Hello ${name}! I am Harin AI, your personal assistant. How can I help you with your ${isTeacher ? 'class management' : 'learning journey'}?`;
+    }
+    if (lang === 'ja') {
+      return `こんにちは、${name}さん！私はハリンAI、あなたのパーソナルアシスタントです。${isTeacher ? 'クラスの管理' : '学習の道のり'}について、何かお手伝いできることはありますか？`;
+    }
+    return `Halo ${name}! Saya Harin AI, asisten pribadimu. Ada yang bisa saya bantu terkait ${isTeacher ? 'manajemen kelas' : 'perjalanan belajarmu'}?`;
+  };
+
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: `Halo ${userName}! Saya Harin AI, asisten pribadimu. Ada yang bisa saya bantu terkait ${userRole === 'teacher' ? 'manajemen kelas' : 'perjalanan belajarmu'}?` }
+    { role: 'assistant', content: getWelcomeMessage(profile.language || 'id', userName, userRole) }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -64,11 +84,20 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
     }
   }, [messages]);
 
+  useEffect(() => {
+    setMessages(prev => {
+      if (prev.length <= 1) {
+        return [{ role: 'assistant', content: getWelcomeMessage(profile.language || 'id', userName, userRole) }];
+      }
+      return prev;
+    });
+  }, [profile.language, userName, userRole]);
+
   const projectContext = `
     Kamu adalah Harin AI, asisten cerdas untuk platform "Harin Learning".
     
     ATURAN PENTING — WAJIB DIIKUTI:
-    1. SELALU gunakan Bahasa Indonesia yang santai, ramah, dan mudah dipahami.
+    1. SELALU gunakan ${getLanguageName(profile.language || 'id')} yang santai, ramah, dan mudah dipahami.
     2. JANGAN gunakan simbol markdown seperti **, *, ##, ###, atau backtick dalam jawabanmu.
     3. Gunakan tanda titik, koma, dan enter biasa untuk memisahkan ide.
     4. Untuk daftar/list, cukup gunakan tanda - (strip) di awal baris.
@@ -113,7 +142,11 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
       setTimeout(() => {
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: "Halo! Sebagai tamu, akses obrolan saya agak terbatas. Yuk, daftar akun Harin Learning dulu supaya kita bisa ngobrol lebih seru dan saya bisa bantu belajarmu lebih maksimal!" 
+          content: profile.language === 'en'
+            ? "Hello! As a guest, my access to chat is limited. Come on, sign up for a Harin Learning account first so we can chat more fun and I can help you learn better!"
+            : profile.language === 'ja'
+            ? "こんにちは！ゲストユーザーとして、チャットへのアクセスは制限されています。もっと楽しくお話ししたり、学習を最大限にサポートできるよう、まずはHarin Learningのアカウントを作成しましょう！"
+            : "Halo! Sebagai tamu, akses obrolan saya agak terbatas. Yuk, daftar akun Harin Learning dulu supaya kita bisa ngobrol lebih seru dan saya bisa bantu belajarmu lebih maksimal!"
         }]);
         setLoading(false);
       }, 800);
@@ -147,7 +180,14 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
       setMessages(prev => [...prev, aiResponse]);
     } catch (error) {
       console.error("AI Error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Maaf, sepertinya saya sedang mengalami gangguan koneksi. Coba lagi nanti ya!" }]);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: profile.language === 'en'
+          ? "Sorry, I seem to be experiencing connection issues. Please try again later!"
+          : profile.language === 'ja'
+          ? "申し訳ありません、接続で問題が発生しているようです。後でもう一度お試しください！"
+          : "Maaf, sepertinya saya sedang mengalami gangguan koneksi. Coba lagi nanti ya!"
+      }]);
     } finally {
       setLoading(false);
     }
@@ -206,7 +246,12 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Tanya Harin AI..." 
+              placeholder={
+                profile.language === 'en' ? "Ask Harin AI..." :
+                profile.language === 'ja' ? "Harin AIに質問する..." :
+                profile.language === 'zh' ? "向 Harin AI 提问..." :
+                "Tanya Harin AI..."
+              } 
               className="flex-1 bg-surface border-2 border-on-surface rounded-xl px-4 py-3 text-sm font-bold focus:bg-primary-container/10 outline-none transition-all shadow-[2px_2px_0px_0px_#000]"
             />
             <button 

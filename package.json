@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "npm run dev --workspace=apps/dashboard",
     "build": "npm run build --workspace=apps/dashboard",
-    "preview": "npm run preview --workspace=apps/dashboard"
+    "preview": "npm run preview --workspace=apps/dashboard",
+    "keep-alive": "npm run keep-alive --workspace=apps/dashboard"
   }
 }

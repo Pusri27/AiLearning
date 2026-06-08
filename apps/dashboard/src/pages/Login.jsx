@@ -6,17 +6,11 @@ import { useUserProfile } from '../context/UserProfileContext';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { loginAsGuest } = useUserProfile();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
-
-  const handleGuestLogin = () => {
-    loginAsGuest();
-    navigate('/');
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -176,11 +170,6 @@ const Login = () => {
               <p className="font-body-md text-body-md text-on-surface-variant">
                 Belum punya akun? <button onClick={() => navigate('/signup')} className="text-[#FF6B4A] font-bold hover:underline">Daftar Sekarang</button>
               </p>
-              <div className="pt-4">
-                <button type="button" onClick={handleGuestLogin} className="inline-flex items-center gap-2 px-6 py-2 rounded-full border-2 border-dashed border-outline text-outline hover:bg-surface-container-high hover:text-on-surface transition-all group">
-                  <span className="font-label-md text-label-md">Masuk sebagai Tamu</span>
-                </button>
-              </div>
             </div>
           </div>
         </section>

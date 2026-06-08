@@ -211,15 +211,6 @@ const SignUp = () => {
                     Apple
                   </button>
                 </div>
-                <div className="text-center pt-4">
-                  <button 
-                    type="button"
-                    onClick={() => navigate('/')}
-                    className="text-sm font-bold opacity-60 hover:opacity-100 hover:text-[#FF6B4A] transition-all"
-                  >
-                    Masuk sebagai Tamu
-                  </button>
-                </div>
               </form>
             </div>
           </div>

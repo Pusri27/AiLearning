@@ -8,6 +8,7 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { showToast } from '../lib/toast';
 import { useUserProfile } from '../context/UserProfileContext';
+import { getTranslation } from '../lib/i18n';
 
 /* ─── Star Rating Component ─── */
 const StarRating = ({ value, onChange }) => (
@@ -29,6 +30,57 @@ const CourseLearn = () => {
   const { id: courseId } = useParams();
   const navigate = useNavigate();
   const { profile } = useUserProfile();
+  const t = (key) => getTranslation(profile.language || 'id', key);
+  const lang = profile.language || 'id';
+
+  const [translatedTitle, setTranslatedTitle] = useState('');
+  const [translatedContent, setTranslatedContent] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isTranslationActive, setIsTranslationActive] = useState(false);
+
+  useEffect(() => {
+    setIsTranslationActive(false);
+    setTranslatedTitle('');
+    setTranslatedContent('');
+  }, [activeSyllabus, profile.language]);
+
+  const handleTranslateClick = async () => {
+    if (isTranslationActive) {
+      setIsTranslationActive(false);
+      return;
+    }
+    
+    if (translatedTitle && translatedContent) {
+      setIsTranslationActive(true);
+      return;
+    }
+    
+    setIsTranslating(true);
+    try {
+      const result = await courseService.translateContent(
+        activeSyllabus.title,
+        activeSyllabus.assignment_text || activeSyllabus.content || '',
+        lang
+      );
+      setTranslatedTitle(result.title);
+      setTranslatedContent(result.content);
+      setIsTranslationActive(true);
+      showToast(
+        lang === 'en'
+          ? "Translated with Harin AI! ✦"
+          : lang === 'ja'
+          ? "Harin AIで翻訳しました！ ✦"
+          : lang === 'zh'
+          ? "已通过 Harin AI 翻译！ ✦"
+          : "Berhasil diterjemahkan dengan Harin AI! ✦"
+      );
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal menerjemahkan konten. Coba lagi.", "error");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   const [course, setCourse] = useState(null);
   const [sections, setSections] = useState([]);
@@ -284,6 +336,25 @@ const CourseLearn = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {activeSyllabus && (
+              <button
+                onClick={handleTranslateClick}
+                disabled={isTranslating}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border-2 border-on-surface rounded-xl font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all disabled:opacity-50 hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none ${
+                  isTranslationActive
+                    ? 'bg-primary text-white'
+                    : 'bg-primary-container text-on-surface'
+                }`}
+              >
+                <Icon name="auto_awesome" className={`w-4 h-4 ${isTranslating ? 'animate-spin' : ''}`} />
+                {isTranslating
+                  ? (lang === 'en' ? 'Translating...' : lang === 'ja' ? '翻訳中...' : lang === 'zh' ? '翻译中...' : 'Menerjemahkan...')
+                  : isTranslationActive
+                  ? (lang === 'en' ? 'Show Original' : lang === 'ja' ? '原文を表示' : lang === 'zh' ? '显示原文' : 'Tampilkan Asli')
+                  : (lang === 'en' ? 'Translate with AI' : lang === 'ja' ? 'AI de Honyaku' : lang === 'zh' ? 'AI 翻译' : 'Terjemahkan (AI)')
+                }
+              </button>
+            )}
             {completedIds.length === allSyllabus.length && allSyllabus.length > 0 && !hasRated && (
               <button
                 onClick={() => setShowRatingModal(true)}
@@ -301,8 +372,8 @@ const CourseLearn = () => {
           {/* Syllabus Sidebar */}
           <aside className="w-[280px] bg-surface border-r-2 border-on-surface flex flex-col hidden lg:flex">
             <div className="p-5 border-b-2 border-on-surface">
-              <h2 className="font-black text-lg">Daftar Materi</h2>
-              <p className="text-xs text-on-surface-variant font-bold mt-1">{completedIds.length}/{allSyllabus.length} selesai</p>
+              <h2 className="font-black text-lg">{{ id: 'Daftar Materi', en: 'Syllabus', ja: '講義内容', zh: '课程大纲' }[lang]}</h2>
+              <p className="text-xs text-on-surface-variant font-bold mt-1">{completedIds.length}/{allSyllabus.length} {{ id: 'selesai', en: 'completed', ja: '完了', zh: '已完成' }[lang]}</p>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
               {sections.map((section) => (
@@ -334,7 +405,7 @@ const CourseLearn = () => {
             {!activeSyllabus ? (
               <div className="h-full flex items-center justify-center flex-col gap-4 text-center opacity-40">
                 <Icon name="school" className="w-20 h-20" />
-                <p className="font-black text-xl">Pilih materi untuk memulai belajar.</p>
+                <p className="font-black text-xl">{{ id: 'Pilih materi untuk memulai belajar.', en: 'Select a lesson to start learning.', ja: '学習を始めるにはレッスンを選択してください。', zh: '选择课程开始学习。' }[lang]}</p>
               </div>
             ) : (
               <div className="max-w-4xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -345,8 +416,12 @@ const CourseLearn = () => {
                 )}
 
                 <div className="space-y-6">
-                  <h1 className="text-4xl md:text-5xl font-black">{activeSyllabus.title}</h1>
-                  <div className="prose prose-lg max-w-none font-medium leading-relaxed text-on-surface-variant whitespace-pre-wrap">{activeSyllabus.content}</div>
+                  <h1 className="text-4xl md:text-5xl font-black">
+                    {isTranslationActive && translatedTitle ? translatedTitle : activeSyllabus.title}
+                  </h1>
+                  <div className="prose prose-lg max-w-none font-medium leading-relaxed text-on-surface-variant whitespace-pre-wrap">
+                    {isTranslationActive && translatedContent ? translatedContent : activeSyllabus.content}
+                  </div>
                 </div>
 
                 {activeSyllabus.file_url && (
@@ -356,12 +431,12 @@ const CourseLearn = () => {
                         <Icon name="description" className="w-8 h-8 text-primary" />
                       </div>
                       <div>
-                        <p className="font-black text-lg">Materi Pendukung</p>
-                        <p className="text-xs font-bold text-on-surface-variant">Unduh file materi (PDF/PPT/Word) untuk dipelajari secara offline.</p>
+                        <p className="font-black text-lg">{{ id: 'Materi Pendukung', en: 'Supporting Material', ja: '参考資料', zh: '配套材料' }[lang]}</p>
+                        <p className="text-xs font-bold text-on-surface-variant">{{ id: 'Unduh file materi (PDF/PPT/Word) untuk dipelajari secara offline.', en: 'Download lesson files (PDF/PPT/Word) to study offline.', ja: 'オフライン学習用のファイル（PDF/PPT/Word）をダウンロードします。', zh: '下载课程材料文件（PDF/PPT/Word）以进行离线学习。' }[lang]}</p>
                       </div>
                     </div>
                     <a href={activeSyllabus.file_url} target="_blank" rel="noopener noreferrer" className="bg-primary text-on-primary px-8 py-3 rounded-2xl border-4 border-on-surface font-black shadow-[4px_4px_0px_0px_#000] hover:translate-y-1 transition-all flex items-center gap-2">
-                      <Icon name="download" className="w-5 h-5" /> Download File
+                      <Icon name="download" className="w-5 h-5" /> {{ id: 'Unduh File', en: 'Download File', ja: 'ファイルをダウンロード', zh: '下载文件' }[lang]}
                     </a>
                   </div>
                 )}
@@ -370,11 +445,11 @@ const CourseLearn = () => {
                   <div className="bg-secondary-container/20 p-8 rounded-[40px] border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex items-center gap-3 mb-6">
                       <Icon name="assignment" className="w-8 h-8 text-secondary" />
-                      <h3 className="text-2xl font-black">Tugas & Latihan</h3>
+                      <h3 className="text-2xl font-black">{{ id: 'Tugas & Latihan', en: 'Tasks & Exercises', ja: '課題と演习', zh: '任务与练习' }[lang]}</h3>
                     </div>
                     <div className="bg-white p-6 rounded-2xl border-2 border-on-surface font-bold text-on-surface-variant mb-8 italic">{activeSyllabus.assignment_text}</div>
                     <div className="border-t-2 border-on-surface/10 pt-8">
-                      <p className="font-black text-xs uppercase tracking-widest text-on-surface-variant mb-4">Pengumpulan Tugas</p>
+                      <p className="font-black text-xs uppercase tracking-widest text-on-surface-variant mb-4">{{ id: 'Pengumpulan Tugas', en: 'Assignment Submission', ja: '課題の提出', zh: '提交任务' }[lang]}</p>
                       {currentSubmission ? (
                         <div className="bg-success/10 border-2 border-success p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
@@ -382,18 +457,29 @@ const CourseLearn = () => {
                               <Icon name="task_alt" className="w-6 h-6" />
                             </div>
                             <div>
-                              <p className="font-black text-success">Tugas Sudah Dikumpulkan</p>
-                              <p className="text-[10px] font-bold text-on-surface-variant">Dikirim: {new Date(currentSubmission.submitted_at).toLocaleString('id-ID')}</p>
+                              <p className="font-black text-success">{{ id: 'Tugas Sudah Dikumpulkan', en: 'Assignment Submitted', ja: '課題提出済み', zh: '任务已提交' }[lang]}</p>
+                              <p className="text-[10px] font-bold text-on-surface-variant">
+                                {{ id: 'Dikirim:', en: 'Submitted at:', ja: '提出日:', zh: '提交时间:' }[lang]} {new Date(currentSubmission.submitted_at).toLocaleString('id-ID')}
+                              </p>
                             </div>
                           </div>
-                          <a href={currentSubmission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs font-black underline hover:text-primary transition-colors">Lihat File Saya</a>
+                          <a href={currentSubmission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs font-black underline hover:text-primary transition-colors">
+                            {{ id: 'Lihat File Saya', en: 'View My File', ja: 'ファイルを表示', zh: '查看我的文件' }[lang]}
+                          </a>
                         </div>
                       ) : (
                         <label className={`group cursor-pointer block border-4 border-dashed rounded-2xl p-10 text-center transition-all ${uploading ? 'opacity-50 pointer-events-none' : 'border-on-surface/20 hover:border-secondary hover:bg-secondary/5'}`}>
                           <input type="file" className="hidden" onChange={(e) => handleAssignmentUpload(e.target.files[0])} />
                           <Icon name={uploading ? 'sync' : 'cloud_upload'} className={`w-12 h-12 mx-auto mb-3 text-secondary ${uploading ? 'animate-spin' : ''}`} />
-                          <p className="font-black text-lg">{uploading ? 'Sedang Mengirim...' : 'Upload Jawaban Tugas'}</p>
-                          <p className="text-xs font-bold text-on-surface-variant mt-2">Klik untuk memilih file (PDF, ZIP, Gambar, dll)</p>
+                          <p className="font-black text-lg">
+                            {uploading 
+                              ? { id: 'Sedang Mengirim...', en: 'Submitting...', ja: '送信中...', zh: '提交中...' }[lang] 
+                              : { id: 'Upload Jawaban Tugas', en: 'Upload Assignment Answer', ja: '課題の回答をアップロード', zh: '上传任务答案' }[lang]
+                            }
+                          </p>
+                          <p className="text-xs font-bold text-on-surface-variant mt-2">
+                            {{ id: 'Klik untuk memilih file (PDF, ZIP, Gambar, dll)', en: 'Click to choose file (PDF, ZIP, Image, etc.)', ja: 'クリックしてファイルを選択（PDF、ZIP、画像など）', zh: '点击选择文件（PDF、ZIP、图片等）' }[lang]}
+                          </p>
                         </label>
                       )}
                     </div>
@@ -405,19 +491,19 @@ const CourseLearn = () => {
                   <div className="flex gap-4 flex-wrap">
                     {allSyllabus.findIndex(s => s.id === activeSyllabus.id) > 0 && (
                       <button onClick={handlePrev} className="px-8 py-4 bg-white rounded-2xl border-4 border-on-surface font-black text-lg shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all flex items-center gap-2">
-                        <Icon name="arrow_back" className="w-6 h-6" /> Materi Sebelumnya
+                        <Icon name="arrow_back" className="w-6 h-6" /> {{ id: 'Materi Sebelumnya', en: 'Previous Lesson', ja: '前のレッスン', zh: '上一课' }[lang]}
                       </button>
                     )}
 
                     {!completedIds.includes(activeSyllabus.id) && (
                       <button onClick={handleComplete} className="px-10 py-4 bg-primary text-on-primary rounded-2xl border-4 border-on-surface font-black text-lg shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all flex items-center gap-2">
-                        <Icon name="check_circle" className="w-6 h-6" /> Sudah Selesai
+                        <Icon name="check_circle" className="w-6 h-6" /> {{ id: 'Sudah Selesai', en: 'Mark as Completed', ja: '完了とする', zh: '标记为已完成' }[lang]}
                       </button>
                     )}
 
                     {completedIds.includes(activeSyllabus.id) && (
                       <div className="px-10 py-4 bg-success/20 text-success rounded-2xl border-4 border-success font-black text-lg flex items-center gap-2">
-                        <Icon name="check_circle" className="w-6 h-6" /> Sudah Selesai
+                        <Icon name="check_circle" className="w-6 h-6" /> {{ id: 'Sudah Selesai', en: 'Completed', ja: '完了済み', zh: '已完成' }[lang]}
                       </div>
                     )}
                   </div>
@@ -427,16 +513,16 @@ const CourseLearn = () => {
                     isLastSyllabus ? (
                       !hasRated ? (
                         <button onClick={() => setShowRatingModal(true)} className="px-10 py-4 bg-[#FFB800] text-on-surface rounded-2xl border-4 border-on-surface font-black text-lg shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all flex items-center gap-2">
-                          ⭐ Beri Rating Kursus
+                          ⭐ {{ id: 'Beri Rating Kursus', en: 'Rate Course', ja: 'コースを評価', zh: '为课程评分' }[lang]}
                         </button>
                       ) : (
                         <div className="px-8 py-4 bg-secondary-container text-on-secondary-container rounded-2xl border-4 border-on-surface font-black text-lg flex items-center gap-2">
-                          ✅ Sudah Memberi Rating
+                          ✅ {{ id: 'Sudah Memberi Rating', en: 'Already Rated', ja: '評価済み', zh: '已评分' }[lang]}
                         </div>
                       )
                     ) : (
                       <button onClick={handleNext} className="px-10 py-4 bg-on-surface text-white rounded-2xl border-4 border-on-surface font-black text-lg shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all flex items-center gap-2">
-                        Materi Selanjutnya <Icon name="arrow_forward" className="w-6 h-6" />
+                        {{ id: 'Materi Selanjutnya', en: 'Next Lesson', ja: '次のレッスン', zh: '下一课' }[lang]} <Icon name="arrow_forward" className="w-6 h-6" />
                       </button>
                     )
                   )}

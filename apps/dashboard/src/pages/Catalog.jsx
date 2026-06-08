@@ -5,9 +5,13 @@ import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { useUserProfile } from '../context/UserProfileContext';
+import { getTranslation } from '../lib/i18n';
 
 const Catalog = () => {
   const navigate = useNavigate();
+  const { profile, updateProfile } = useUserProfile();
+  const t = (key) => getTranslation(profile.language || 'id', key);
   const [courses,  setCourses]  = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [category, setCategory] = useState('Semua');
@@ -49,6 +53,9 @@ const Catalog = () => {
 
   const filtered = useMemo(() => {
     let result = [...courses];
+    const currentLang = profile.language || 'id';
+    result = result.filter(c => (c.language || 'id') === currentLang);
+
     if (category !== 'Semua') result = result.filter(c => c.category === category);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -60,7 +67,7 @@ const Catalog = () => {
     if (sortBy === 'price_desc') result.sort((a, b) => b.price - a.price);
     if (sortBy === 'az')       result.sort((a, b) => a.title.localeCompare(b.title));
     return result;
-  }, [courses, category, search, sortBy]);
+  }, [courses, category, search, sortBy, profile.language]);
 
   const formatPrice = (p) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(p);
@@ -122,29 +129,47 @@ const Catalog = () => {
                         : 'bg-white text-on-surface border-on-surface/40 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-primary-container'
                     }`}
                   >
-                    {cat}
+                    {cat === 'Semua' ? t('allCategories') : cat}
                   </button>
                 ))}
               </div>
-              {/* Sort */}
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                className="border-2 border-on-surface bg-white text-sm font-bold px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:ring-0 rounded-lg shrink-0 cursor-pointer"
-              >
-                <option value="newest">Terbaru</option>
-                <option value="oldest">Terlama</option>
-                <option value="price_asc">Harga ↑</option>
-                <option value="price_desc">Harga ↓</option>
-                <option value="az">A–Z</option>
-              </select>
+              {/* Filter Controls (Language + Sort) */}
+              <div className="flex flex-wrap items-center gap-3 self-end md:self-auto">
+                {/* Language Select */}
+                <div className="flex items-center gap-1.5 border-2 border-on-surface bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg">
+                  <Icon name="language" className="w-4 h-4 text-on-surface" />
+                  <select
+                    value={profile.language || 'id'}
+                    onChange={e => updateProfile({ language: e.target.value })}
+                    className="border-none bg-transparent text-sm font-bold p-0 pr-6 focus:ring-0 cursor-pointer outline-none"
+                  >
+                    <option value="id">Bahasa Indonesia</option>
+                    <option value="en">English (US)</option>
+                    <option value="ja">日本語</option>
+                    <option value="zh">中文 (简体)</option>
+                  </select>
+                </div>
+
+                {/* Sort */}
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value)}
+                  className="border-2 border-on-surface bg-white text-sm font-bold px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:ring-0 rounded-lg shrink-0 cursor-pointer"
+                >
+                  <option value="newest">{t('newest')}</option>
+                  <option value="oldest">{profile.language === 'en' ? 'Oldest' : profile.language === 'ja' ? '古い順' : profile.language === 'zh' ? '最早' : 'Terlama'}</option>
+                  <option value="price_asc">{profile.language === 'en' ? 'Price ↑' : profile.language === 'ja' ? '価格 ↑' : profile.language === 'zh' ? '价格 ↑' : 'Harga ↑'}</option>
+                  <option value="price_desc">{profile.language === 'en' ? 'Price ↓' : profile.language === 'ja' ? '価格 ↓' : profile.language === 'zh' ? '价格 ↓' : 'Harga ↓'}</option>
+                  <option value="az">A–Z</option>
+                </select>
+              </div>
             </div>
             {/* Search Bar */}
             <div className="flex items-center bg-white border-2 border-on-surface px-4 py-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg gap-2">
               <Icon name="search" className="w-5 h-5 text-on-surface-variant shrink-0" />
               <input
                 className="bg-transparent border-none outline-none text-sm focus:ring-0 w-full"
-                placeholder="Cari kursus atau instruktur..."
+                placeholder={t('searchCourses')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -211,16 +236,42 @@ const Catalog = () => {
               <div className="col-span-full py-20 text-center border-4 border-dashed border-on-surface/20 bg-surface-container-low rounded-3xl">
                 <Icon name="search" className="w-14 h-14 mx-auto mb-4 opacity-20" />
                 <h3 className="font-headline-md text-2xl">
-                  {search ? `Tidak ada hasil untuk "${search}"` : 'Belum ada kursus tersedia'}
+                  {search ? `Tidak ada hasil untuk "${search}"` : `Belum ada kursus dalam ${
+                    profile.language === 'en' ? 'English (US)' : profile.language === 'ja' ? '日本語' : profile.language === 'zh' ? '中文 (简体)' : 'Bahasa Indonesia'
+                  }`}
                 </h3>
-                <p className="text-on-surface-variant mt-2">
-                  {search ? 'Coba kata kunci lain atau hapus filter.' : 'Silakan tambahkan data kursus di Supabase.'}
+                <p className="text-on-surface-variant mt-2 max-w-md mx-auto">
+                  {search 
+                    ? 'Coba kata kunci lain atau hapus filter.' 
+                    : profile.language === 'en'
+                    ? 'There are currently no courses created in this language. Please change the content language preference or create a new course.'
+                    : profile.language === 'ja'
+                    ? '現在、この言語で作成されたコースはありません。コンテンツ言語を変更するか、新しいコースを作成してください。'
+                    : profile.language === 'zh'
+                    ? '当前该语言下暂无课程。请切换内容语言，或创建新课程。'
+                    : 'Saat ini belum ada kursus yang dibuat dalam bahasa ini. Silakan ganti bahasa konten atau tambahkan kursus baru.'
+                  }
                 </p>
-                {search && (
-                  <button onClick={() => { setSearch(''); setCategory('Semua'); }} className="mt-4 px-6 py-2 bg-primary text-white border-2 border-on-surface rounded-lg font-label-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    Reset Filter
+                <div className="flex gap-4 justify-center mt-6 flex-wrap">
+                  {profile.role === 'teacher' && (
+                    <button 
+                      onClick={() => navigate('/teacher/dashboard')} 
+                      className="px-6 py-2 bg-tertiary text-white border-2 border-on-surface rounded-lg font-label-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                    >
+                      {profile.language === 'en' ? 'Create New Course' : profile.language === 'ja' ? '新しいコースを作成' : profile.language === 'zh' ? '创建新课程' : 'Buat Kursus Baru'}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => { 
+                      setSearch(''); 
+                      setCategory('Semua'); 
+                      updateProfile({ language: 'id' }); 
+                    }} 
+                    className="px-6 py-2 bg-primary text-white border-2 border-on-surface rounded-lg font-label-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                  >
+                    {profile.language === 'en' ? 'Change to Indonesian' : profile.language === 'ja' ? 'インドネシア語に変更' : profile.language === 'zh' ? '切换为印尼语' : 'Ganti ke Bahasa Indonesia'}
                   </button>
-                )}
+                </div>
               </div>
             )}
           </section>

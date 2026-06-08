@@ -436,7 +436,8 @@ const TeacherCreateCourse = () => {
       
       const optimized = await courseService.optimizeMaterial(
         sourceContext,
-        `TOPIK: ${editingSyllabus.title}. FILE: ${fileName}. INSTRUKSI: Rangkum teks ini agar padat dan mudah dipelajari.`
+        `TOPIK: ${editingSyllabus.title}. FILE: ${fileName}. INSTRUKSI: Rangkum teks ini agar padat dan mudah dipelajari.`,
+        formData.language || 'id'
       );
       
       setAiDraft(optimized);
@@ -707,7 +708,8 @@ const TeacherCreateCourse = () => {
                         onChange={handleInputChange}
                       >
                         <option value="id">Bahasa Indonesia</option>
-                        <option value="en">English</option>
+                        <option value="en">English (US)</option>
+                        <option value="ja">日本語</option>
                       </select>
                       <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none font-black">keyboard_arrow_down</span>
                     </div>

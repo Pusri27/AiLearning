@@ -40,8 +40,8 @@ const ProfileDropdown = () => {
       {/* Dropdown Menu */}
       <div className="absolute right-0 mt-2 w-56 bg-surface border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100]">
         <div className="p-3 border-b-2 border-on-surface bg-surface-container-low rounded-t-lg">
-          <p className="font-label-bold text-sm line-clamp-1">{profile.fullName || 'Guest User'}</p>
-          <p className="text-xs text-on-surface-variant line-clamp-1">{profile.email || 'Not logged in'}</p>
+          <p className="font-label-bold text-sm line-clamp-1">{profile.fullName || { id: 'Tamu', en: 'Guest User', ja: 'ゲストユーザー', zh: '访客用户' }[profile.language || 'id']}</p>
+          <p className="text-xs text-on-surface-variant line-clamp-1">{profile.email || { id: 'Belum masuk', en: 'Not logged in', ja: '未ログイン', zh: '未登录' }[profile.language || 'id']}</p>
         </div>
         <div className="p-1">
           {!isGuest && profile.email ? (
@@ -51,7 +51,7 @@ const ProfileDropdown = () => {
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
               >
                 <Icon name="account_circle" className="w-5 h-5" />
-                Profile
+                {{ id: 'Profil', en: 'Profile', ja: 'プロフィール', zh: '个人资料' }[profile.language || 'id']}
               </button>
               {profile.role === 'teacher' && (
                 <button
@@ -59,7 +59,7 @@ const ProfileDropdown = () => {
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
                 >
                   <Icon name="dashboard" className="w-5 h-5" />
-                  Teacher Dashboard
+                  {{ id: 'Dashboard Pengajar', en: 'Teacher Dashboard', ja: '講師ダッシュボード', zh: '教师控制台' }[profile.language || 'id']}
                 </button>
               )}
               <button
@@ -67,7 +67,7 @@ const ProfileDropdown = () => {
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
               >
                 <Icon name="settings" className="w-5 h-5" />
-                Settings
+                {{ id: 'Pengaturan', en: 'Settings', ja: '設定', zh: '系统设置' }[profile.language || 'id']}
               </button>
               <div className="border-t-2 border-on-surface my-1" />
               <button
@@ -75,7 +75,7 @@ const ProfileDropdown = () => {
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-error-container hover:text-error transition-colors text-left font-label-bold text-sm text-error"
               >
                 <Icon name="logout" className="w-5 h-5" />
-                Logout
+                {{ id: 'Keluar', en: 'Logout', ja: 'ログアウト', zh: '退出登录' }[profile.language || 'id']}
               </button>
             </>
           ) : (
@@ -85,14 +85,14 @@ const ProfileDropdown = () => {
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
               >
                 <Icon name="login" className="w-5 h-5" />
-                Login
+                {{ id: 'Masuk', en: 'Login', ja: 'ログイン', zh: '登录' }[profile.language || 'id']}
               </button>
               <button
                 onClick={() => navigate('/signup')}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-primary-container hover:text-on-primary-container transition-colors text-left font-label-bold text-sm"
               >
                 <Icon name="person_add" className="w-5 h-5" />
-                Sign Up
+                {{ id: 'Daftar', en: 'Sign Up', ja: '新規登録', zh: '注册' }[profile.language || 'id']}
               </button>
             </>
           )}
