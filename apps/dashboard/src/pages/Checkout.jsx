@@ -141,6 +141,30 @@ const Checkout = () => {
         throw enrollError;
       }
 
+      // --- Notify Instructors & Collaborators ---
+      try {
+        const { data: userData } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+        const studentName = userData?.full_name || 'Seorang siswa';
+
+        for (const item of cartItems) {
+          const { data: collabs } = await supabase.from('course_collaborators').select('teacher_id').eq('course_id', item.id).eq('status', 'accepted');
+          const recipients = [item.instructor_id, ...(collabs || []).map(c => c.teacher_id)].filter(id => id && id !== user.id);
+          
+          if (recipients.length > 0) {
+            const notifications = recipients.map(teacherId => ({
+              user_id: teacherId,
+              title: 'Pendaftaran Kursus Baru! 🚀',
+              content: `${studentName} baru saja bergabung di kursus "${item.title}".`,
+              type: 'course',
+              link_to: `/teacher/students` // Direct to student management
+            }));
+            await supabase.from('notifications').insert(notifications);
+          }
+        }
+      } catch (err) {
+        console.error("Error sending enrollment notifications:", err);
+      }
+
       // 3. Hapus semua item dari cart setelah berhasil (hanya jika memang berasal dari cart)
       const cartIds = cartItems.map(item => item.cartId).filter(Boolean);
       if (cartIds.length > 0) {

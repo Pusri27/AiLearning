@@ -26,6 +26,7 @@ import TeacherStudents from './pages/TeacherStudents';
 import TeacherAnalytics from './pages/TeacherAnalytics';
 import TeacherActivity from './pages/TeacherActivity';
 import TeacherCreateCourse from './pages/TeacherCreateCourse';
+import TeacherCoursePreview from './pages/TeacherCoursePreview';
 import TeacherSettings from './pages/TeacherSettings';
 import Community from './pages/Community';
 import CourseLearn from './pages/CourseLearn';
@@ -122,7 +123,8 @@ function AppContent() {
         <Route path="/teacher/activity"         element={P(<TeacherActivity />)} />
         <Route path="/teacher/settings"         element={P(<TeacherSettings />)} />
         <Route path="/teacher/courses/create"   element={P(<TeacherCreateCourse />)} />
-        <Route path="/teacher/courses/edit/:id" element={P(<TeacherCreateCourse />)} />
+        <Route path="/teacher/courses/edit/:id"    element={P(<TeacherCreateCourse />)} />
+        <Route path="/teacher/courses/preview/:id" element={P(<TeacherCoursePreview />)} />
 
         {/* ── Public routes ── */}
         <Route path="/pricing"  element={<Pricing />} />

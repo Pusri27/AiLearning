@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import Icon from './Icon';
 import { showToast } from '../lib/toast';
 
-const TeacherSidebar = ({ user }) => {
+const TeacherSidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -30,7 +30,7 @@ const TeacherSidebar = ({ user }) => {
   return (
     <>
       {/* Desktop Side Navigation */}
-      <nav className="hidden lg:flex flex-col h-full p-6 border-r-4 border-on-surface bg-surface-container-lowest fixed left-0 top-0 w-[280px] z-[60] pointer-events-auto">
+      <nav className="hidden lg:flex flex-col h-screen overflow-y-auto p-6 border-r-4 border-on-surface bg-surface-container-lowest fixed left-0 top-0 w-[280px] z-[60] pointer-events-auto">
         <div className="mb-12 cursor-pointer group" onClick={() => navigate('/')}>
           <div className="flex items-center gap-2">
             <Icon name="auto_awesome" className="w-10 h-10 text-primary group-hover:rotate-12 transition-transform" />

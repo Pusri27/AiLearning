@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, NavLink, useParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
@@ -7,6 +7,7 @@ import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { showToast, friendlyError } from '../lib/toast';
 import { useUserProfile } from '../context/UserProfileContext';
+import { courseService } from '../lib/courseService';
 
 const CourseDetail = () => {
   const { id } = useParams();
@@ -21,214 +22,166 @@ const CourseDetail = () => {
   const [instructorStats, setInstructorStats] = useState({ courses: 0, students: 0 });
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [avgRating, setAvgRating] = useState(null);
-  const [ratingCount, setRatingCount] = useState(0);
   const [collaborators, setCollaborators] = useState([]);
 
+  const [enrollmentProgress, setEnrollmentProgress] = useState(0);
+  const [lessons, setLessons] = useState([]);
+
+  const curriculumRef = React.useRef(null);
+  const [sections, setSections] = useState([]);
   // Helper: Get first sentence for description
   const getBriefDesc = (text) => {
     if (!text) return 'Pelajari materi ini untuk meningkatkan skill kamu.';
     return text.split('.')[0] + '.';
   };
 
-  // Helper: Calculate Hours based on video count
-  const calculateHours = () => {
-    const videoCount = syllabus.filter(s => s.video_url).length;
-    if (videoCount === 0) return '2 Hours'; // Min hours
-    return `${videoCount * 0.5} Hours`; // Estimate 30 mins per video
-  };
-
-  const [enrollmentProgress, setEnrollmentProgress] = useState(0);
-  const [enrollmentId, setEnrollmentId] = useState(null);
-  const [lessons, setLessons] = useState([]);
-
-  const curriculumRef = React.useRef(null);
-
-  const handleContinueLearning = () => {
-    const nextLesson = lessons.find(l => !l.completed) || lessons[0];
-    if (nextLesson) {
-      navigate(`/courses/${id}/learn/${nextLesson.id}`);
-    }
-  };
-
-  useEffect(() => {
-    fetchCourse();
-    if (isGuest) {
-      const timer = setTimeout(() => setShowGuestPrompt(true), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [id, isGuest]);
-
-  const fetchCourse = async () => {
+  const fetchCourse = useCallback(async () => {
     setLoading(true);
-    // 1. Fetch Course Data
-    const { data: courseData, error: courseError } = await supabase
-      .from('courses')
-      .select('*')
-      .eq('id', id)
-      .single();
+    try {
+      const { data: courseData, error: courseError } = await supabase
+        .from('courses').select('*').eq('id', id).single();
 
-    if (courseError) {
-      console.error('Error fetching course:', courseError);
-      showToast(friendlyError(courseError), 'error');
-      setLoading(false);
-      return;
-    }
+      if (courseError) throw courseError;
 
-    if (courseData) {
-      // 2. Fetch Instructor Data Separately
-      let instructorData = null;
-      if (courseData.instructor_id) {
-        const { data: instData } = await supabase
-          .from('profiles')
-          .select('full_name, avatar_url')
-          .eq('id', courseData.instructor_id)
-          .maybeSingle();
-        instructorData = instData;
-      }
-
-      if (!instructorData && courseData.instructor) {
-        const { data: fallbackData } = await supabase
-          .from('profiles')
-          .select('full_name, avatar_url')
-          .ilike('full_name', courseData.instructor)
-          .limit(1)
-          .maybeSingle();
-        if (fallbackData) instructorData = fallbackData;
-      }
-      
-      // Combine them manually
-      setCourse({ ...courseData, profiles: instructorData });
-      
-      // 3. Fetch Syllabus
-      const { data: syllabusData } = await supabase
-        .from('course_syllabus')
-        .select('*')
-        .eq('course_id', id)
-        .order('sort_order', { ascending: true });
-      const syllabusList = syllabusData || [];
-      setSyllabus(syllabusList);
-
-      // Fetch enrollment count (correct syntax)
-      const { count: totalCount } = await supabase
-        .from('enrollments')
-        .select('*', { count: 'exact', head: true })
-        .eq('course_id', id);
-      setEnrollmentCount(totalCount || 0);
-
-      // Fetch real ratings from course_ratings table
-      const { data: ratings } = await supabase
-        .from('course_ratings')
-        .select('rating')
-        .eq('course_id', id);
-      if (ratings && ratings.length > 0) {
-        const avg = ratings.reduce((a, b) => a + b.rating, 0) / ratings.length;
-        setAvgRating(avg.toFixed(1));
-        setRatingCount(ratings.length);
-      }
-
-      // 4. Fetch Instructor Stats
-      if (courseData.instructor_id) {
-        const { data: instructorCourses } = await supabase
-          .from('courses')
-          .select('id')
-          .eq('instructor_id', courseData.instructor_id);
-        
-        const instructorCourseIds = instructorCourses?.map(c => c.id) || [];
-        const { count: totalStudents } = await supabase
-          .from('enrollments')
-          .select('*', { count: 'exact', head: true })
-          .in('course_id', instructorCourseIds);
-
-        setInstructorStats({
-          courses: instructorCourseIds.length,
-          students: totalStudents || 0
-        });
-      }
-
-      // 4b. Fetch Accepted Collaborators Safely
-      const { data: collabData } = await supabase
-        .from('course_collaborators')
-        .select('teacher_id, role')
-        .eq('course_id', id)
-        .eq('status', 'accepted');
-      
-      if (collabData && collabData.length > 0) {
-        const teacherIds = collabData.map(c => c.teacher_id);
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, avatar_url')
-          .in('id', teacherIds);
-          
-        if (profileData) {
-          const joinedCollaborators = collabData.map(c => {
-            const p = profileData.find(prof => prof.id === c.teacher_id);
-            return { ...p, role: c.role };
-          }).filter(c => c.id); // ensure profile was found
-          
-          setCollaborators(joinedCollaborators);
+      if (courseData) {
+        let instructorData = null;
+        if (courseData.instructor_id) {
+          const { data: instData } = await supabase
+            .from('profiles').select('full_name, avatar_url').eq('id', courseData.instructor_id).maybeSingle();
+          instructorData = instData;
         }
-      }
 
-      // 5. Check Enrollment Status for Current User
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const { data: enrollment } = await supabase
-          .from('enrollments')
-          .select('id, progress')
-          .eq('user_id', session.user.id)
-          .eq('course_id', id)
-          .maybeSingle();
-        if (enrollment) {
-          setIsEnrolled(true);
-          setEnrollmentId(enrollment.id);
-
-          // Fetch user progress for individual syllabus items
-          const { data: userProgress } = await supabase
-            .from('user_progress')
-            .select('syllabus_id')
-            .eq('user_id', session.user.id)
-            .eq('course_id', id);
-
-          const mappedLessons = syllabusList.map(item => {
-            const isCompleted = userProgress ? userProgress.some(p => p.syllabus_id === item.id) : false;
-            let type = 'reading';
-            let icon = 'menu_book';
-            if (item.type === 'assignment') {
-              type = 'assignment';
-              icon = 'assignment';
-            } else if (item.video_url) {
-              type = 'video';
-              icon = 'play_circle';
-            }
-
-            return {
-              id: item.id,
-              title: item.title,
-              duration: item.type === 'assignment' ? 'Penugasan' : '30 mins',
-              type: type,
-              icon: icon,
-              content: item.content || item.assignment_text || '',
-              completed: isCompleted
-            };
+        if (!instructorData && courseData.instructor) {
+          const { data: fallbackData } = await supabase
+            .from('profiles').select('full_name, avatar_url').ilike('full_name', courseData.instructor).limit(1).maybeSingle();
+          if (fallbackData) instructorData = fallbackData;
+        }
+        
+        setCourse({ ...courseData, profiles: instructorData });
+        const content = await courseService.getCourseContent(id);
+        
+        const sortSyllabus = (sylList) => {
+          if (!sylList) return [];
+          return [...sylList].sort((a, b) => {
+            const aIsAssignment = a.type === 'assignment' || a.type === 'final_project' || !!a.assignment_text;
+            const bIsAssignment = b.type === 'assignment' || b.type === 'final_project' || !!b.assignment_text;
+            if (aIsAssignment && !bIsAssignment) return 1;
+            if (!aIsAssignment && bIsAssignment) return -1;
+            return a.sort_order - b.sort_order;
           });
+        };
 
-          setLessons(mappedLessons);
+        const processedSections = content.map(sec => ({
+          ...sec,
+          course_syllabus: sortSyllabus(sec.course_syllabus)
+        }));
+        setSections(processedSections);
 
-          const completedCount = mappedLessons.filter(l => l.completed).length;
-          const newProgress = mappedLessons.length > 0 ? Math.round((completedCount / mappedLessons.length) * 100) : 0;
-          setEnrollmentProgress(newProgress);
+        const syllabusList = processedSections.flatMap(s => s.course_syllabus);
+        setSyllabus(syllabusList);
 
-          // Update enrollment progress in DB if it mismatched (e.g. syllabus items deleted/added by teacher)
-          if (newProgress !== enrollment.progress) {
-            await supabase
-              .from('enrollments')
-              .update({ progress: newProgress })
-              .eq('id', enrollment.id);
+        const { count: totalCount } = await supabase
+          .from('enrollments').select('*', { count: 'exact', head: true }).eq('course_id', id);
+        setEnrollmentCount(totalCount || 0);
+
+        const { data: ratings } = await supabase
+          .from('course_ratings').select('rating').eq('course_id', id);
+        if (ratings && ratings.length > 0) {
+          const avg = ratings.reduce((a, b) => a + b.rating, 0) / ratings.length;
+          setAvgRating(avg.toFixed(1));
+        }
+
+        if (courseData.instructor_id) {
+          const { data: instructorCourses } = await supabase
+            .from('courses').select('id').eq('instructor_id', courseData.instructor_id);
+          const instructorCourseIds = instructorCourses?.map(c => c.id) || [];
+          const { count: totalStudents } = await supabase
+            .from('enrollments').select('*', { count: 'exact', head: true }).in('course_id', instructorCourseIds);
+          setInstructorStats({ courses: instructorCourseIds.length, students: totalStudents || 0 });
+        }
+
+        const { data: collabData } = await supabase
+          .from('course_collaborators').select('teacher_id, role').eq('course_id', id).eq('status', 'accepted');
+        if (collabData && collabData.length > 0) {
+          const teacherIds = collabData.map(c => c.teacher_id);
+          const { data: profileData } = await supabase.from('profiles').select('id, full_name, username, avatar_url').in('id', teacherIds);
+          if (profileData) {
+            const joinedCollaborators = collabData.map(c => {
+              const p = profileData.find(prof => prof.id === c.teacher_id);
+              return { ...p, role: c.role };
+            }).filter(c => c.id);
+            setCollaborators(joinedCollaborators);
+          }
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: enrollment } = await supabase
+            .from('enrollments').select('id, progress').eq('user_id', session.user.id).eq('course_id', id).maybeSingle();
+          if (enrollment) {
+            setIsEnrolled(true);
+            const { data: userProgress } = await supabase
+              .from('user_progress').select('syllabus_id').eq('user_id', session.user.id).eq('course_id', id);
+
+            const mappedLessons = syllabusList.map(item => {
+              const isComp = userProgress ? userProgress.some(p => p.syllabus_id === item.id) : false;
+              let t = 'reading'; let ic = 'menu_book';
+              if (item.type === 'assignment') { t = 'assignment'; ic = 'assignment'; }
+              else if (item.video_url) { t = 'video'; ic = 'play_circle'; }
+              return { id: item.id, title: item.title, duration: item.type === 'assignment' ? 'Penugasan' : '30 mins', type: t, icon: ic, completed: isComp };
+            });
+            setLessons(mappedLessons);
+            const compCount = mappedLessons.filter(l => l.completed).length;
+            const newProg = mappedLessons.length > 0 ? Math.round((compCount / mappedLessons.length) * 100) : 0;
+            setEnrollmentProgress(newProg);
+            if (newProg !== enrollment.progress) {
+              await supabase.from('enrollments').update({ progress: newProg }).eq('id', enrollment.id);
+            }
           }
         }
       }
+    } catch (err) {
+      console.error('Error fetching course:', err);
+      showToast(friendlyError(err), 'error');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  }, [id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadData = async () => {
+      if (isMounted) await fetchCourse();
+    };
+    loadData();
+    
+    if (isGuest) {
+      const timer = setTimeout(() => {
+        if (isMounted) setShowGuestPrompt(true);
+      }, 500);
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+      };
+    }
+    return () => { isMounted = false; };
+  }, [fetchCourse, isGuest]);
+
+  const handleContinueLearning = () => {
+    let nextLessonId = null;
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+      const uncompleted = section.course_syllabus.find(s => !lessons.find(l => l.id === s.id)?.completed);
+      if (uncompleted) {
+        let locked = false;
+        for (let j = 0; j < i; j++) {
+          if (!sections[j].course_syllabus.every(s => lessons.find(l => l.id === s.id)?.completed)) { locked = true; break; }
+        }
+        if (!locked) { nextLessonId = uncompleted.id; break; }
+      }
+    }
+    if (nextLessonId) { navigate(`/courses/${id}/learn/${nextLessonId}`); }
+    else if (lessons.length > 0) { navigate(`/courses/${id}/learn/${lessons[0].id}`); }
   };
 
   const formatPrice = (price) => {
@@ -236,53 +189,35 @@ const CourseDetail = () => {
   };
 
   const handleAddToCart = async () => {
-    if (isGuest) {
-      setShowGuestPrompt(true);
-      return;
-    }
+    if (isGuest) { setShowGuestPrompt(true); return; }
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      navigate('/login');
-      return;
-    }
-
-    const { error } = await supabase
-      .from('cart')
-      .insert([{ user_id: session.user.id, course_id: course.id }]);
-
+    if (!session) { navigate('/login'); return; }
+    const { error } = await supabase.from('cart').insert([{ user_id: session.user.id, course_id: course.id }]);
     if (error) {
-      if (error.code === '23505') {
-        showToast('Kursus ini sudah ada di keranjang kamu.', 'error');
-      } else {
-        showToast(friendlyError(error), 'error');
-      }
+      if (error.code === '23505') { showToast('Kursus ini sudah ada di keranjang kamu.', 'error'); }
+      else { showToast(friendlyError(error), 'error'); }
     } else {
       showToast('Kursus berhasil ditambahkan ke keranjang!');
       navigate('/cart');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="bg-background text-on-background flex h-screen items-center justify-center">
-        <div className="w-16 h-16 border-4 border-on-surface border-t-primary rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="bg-background text-on-background flex h-screen items-center justify-center">
+      <div className="w-16 h-16 border-4 border-on-surface border-t-primary rounded-full animate-spin"></div>
+    </div>
+  );
 
-  if (!course) {
-    return (
-      <div className="bg-background text-on-background flex h-screen items-center justify-center flex-col gap-4">
-        <h1 className="font-headline-lg">Kursus tidak ditemukan</h1>
-        <button onClick={() => navigate('/catalog')} className="px-6 py-2 bg-primary text-white rounded-lg border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">Kembali ke Katalog</button>
-      </div>
-    );
-  }
+  if (!course) return (
+    <div className="bg-background text-on-background flex h-screen items-center justify-center flex-col gap-4">
+      <h1 className="font-headline-lg">Kursus tidak ditemukan</h1>
+      <button onClick={() => navigate('/catalog')} className="px-6 py-2 bg-primary text-white rounded-lg border-2 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">Kembali ke Katalog</button>
+    </div>
+  );
 
   return (
     <div className="bg-background text-on-background font-body-md flex h-screen overflow-hidden relative">
       <Sidebar />
-      
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="sticky top-0 z-30 flex items-center justify-between px-margin-mobile md:px-margin-desktop py-4 bg-surface border-b-2 border-on-background shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] shrink-0">
           <div className="flex items-center gap-4 md:hidden">
@@ -409,40 +344,67 @@ const CourseDetail = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    {lessons.map((lesson) => (
-                      <div 
-                        key={lesson.id}
-                        onClick={() => navigate(`/courses/${id}/learn/${lesson.id}`)}
-                        className={`group border-2 border-on-background p-4 rounded-xl flex items-center justify-between gap-4 cursor-pointer hover:bg-primary-container/20 transition-all ${lesson.completed ? 'bg-surface-container-low opacity-80' : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-lg border-2 border-on-background flex items-center justify-center ${lesson.completed ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-surface-container text-on-surface'}`}>
-                            <Icon name={lesson.completed ? 'check' : lesson.icon} className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h4 className="font-label-bold text-on-surface group-hover:text-primary transition-colors">{lesson.title}</h4>
-                            <p className="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
-                              <Icon name="schedule" className="w-3.5 h-3.5" /> {lesson.duration}
-                            </p>
-                          </div>
+                  <div className="space-y-10">
+                    {sections.map((section, sIdx) => (
+                      <div key={section.id}>
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="px-3 py-1 bg-on-surface text-white rounded-lg text-xs font-black uppercase tracking-tighter">Bab {sIdx + 1}</div>
+                          <h3 className="font-headline-md text-xl text-on-surface">{section.title}</h3>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {lesson.completed ? (
-                            <span className="text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-600/30 flex items-center gap-1">
-                              Selesai
-                            </span>
-                          ) : (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/courses/${id}/learn/${lesson.id}`);
-                              }}
-                              className="px-4 py-1.5 bg-primary text-white text-xs font-label-bold rounded-lg border-2 border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-[-1px] group-hover:translate-y-[-1px] group-hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all"
-                            >
-                              Mulai
-                            </button>
-                          )}
+                        <div className="space-y-3 pl-2 border-l-4 border-on-surface/10 ml-4">
+                          {section.course_syllabus?.map((syl) => {
+                            const isCompleted = lessons.find(l => l.id === syl.id)?.completed;
+                            const isAssignment = syl.type === 'assignment' || 
+                                                 syl.type === 'final_project' || 
+                                                 !!syl.assignment_text;
+                            const isCoding = syl.type === 'coding' || 
+                                             syl.type === 'interactive' || 
+                                             (syl.initial_code && syl.test_cases);
+                            
+                            return (
+                              <div 
+                                key={syl.id}
+                                onClick={() => navigate(`/courses/${id}/learn/${syl.id}`)}
+                                className={`group border-2 border-on-background p-4 rounded-xl flex items-center justify-between gap-4 cursor-pointer hover:bg-primary-container/20 transition-all ${isCompleted ? 'bg-surface-container-low opacity-80' : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'} ${isAssignment ? 'bg-secondary-container/5 border-secondary/30' : ''}`}
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className={`w-10 h-10 rounded-lg border-2 border-on-background flex items-center justify-center ${isCompleted ? 'bg-tertiary-container text-on-tertiary-container' : isAssignment ? 'bg-secondary-container text-secondary' : 'bg-surface-container text-on-surface'}`}>
+                                    <Icon name={isCompleted ? 'check' : isAssignment ? 'assignment' : isCoding ? 'code' : (syl.video_url ? 'play_circle' : 'menu_book')} className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-label-bold text-on-surface group-hover:text-primary transition-colors text-sm md:text-base">{syl.title}</h4>
+                                    <div className="flex items-center gap-3 mt-0.5">
+                                      <span className="text-[10px] text-on-surface-variant flex items-center gap-1 font-bold uppercase">
+                                        <Icon name="schedule" className="w-3 h-3" /> {isAssignment ? 'Penugasan' : 'Materi'}
+                                      </span>
+                                      {isAssignment && (
+                                        <span className="text-[9px] bg-secondary/10 text-secondary px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter border border-secondary/20">Wajib Selesai</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {isCompleted ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-black text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-600/30 flex items-center gap-1 uppercase">
+                                        Selesai
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/courses/${id}/learn/${syl.id}`);
+                                      }}
+                                      className={`px-4 py-1.5 text-xs font-black rounded-lg border-2 border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-[-1px] group-hover:translate-y-[-1px] group-hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all ${isAssignment ? 'bg-secondary text-white' : 'bg-primary text-white'}`}
+                                    >
+                                      {isAssignment ? 'Lihat Tugas' : 'Mulai'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -479,7 +441,6 @@ const CourseDetail = () => {
             </div>
 
             <div className="space-y-8">
-              {/* Lead Instructor Card */}
               <div className="bg-surface rounded-xl border-2 border-on-background p-6 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)] flex flex-col items-center text-center">
                 <div className="w-24 h-24 rounded-full border-2 border-on-background overflow-hidden mb-4 shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
                   <img alt={course.profiles?.full_name || course.instructor} className="w-full h-full object-cover" src={course.profiles?.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(course.profiles?.full_name || course.instructor || 'I')}/>
@@ -497,8 +458,6 @@ const CourseDetail = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Collaborators Card */}
               {collaborators.length > 0 && (
                 <div className="bg-surface rounded-xl border-2 border-on-background p-6 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)]">
                   <h3 className="font-headline-sm text-headline-sm mb-4 border-b-2 border-on-background pb-2 flex items-center gap-2">
@@ -524,66 +483,28 @@ const CourseDetail = () => {
         </div>
       </div>
 
-      {/* ── Guest Prompt Animation ────────────────────────────────── */}
       {isGuest && (
-        <div 
-          className={`fixed inset-0 z-[100] flex items-center justify-center transition-all duration-700 ${showGuestPrompt ? 'bg-black/60 backdrop-blur-sm opacity-100' : 'opacity-0 pointer-events-none'}`}
-        >
-           <div 
-             className={`bg-primary-container p-8 rounded-2xl border-4 border-on-surface shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] space-y-5 max-w-sm w-full transition-all duration-700 ease-out transform pointer-events-auto relative z-[110]
-               ${showGuestPrompt 
-                 ? 'scale-100 translate-x-0 translate-y-0 opacity-100' 
-                 : 'scale-50 -translate-x-[40vw] translate-y-[40vh] opacity-0'
-               }`}
-           >
+        <div className={`fixed inset-0 z-[100] flex items-center justify-center transition-all duration-700 ${showGuestPrompt ? 'bg-black/60 backdrop-blur-sm opacity-100' : 'opacity-0 pointer-events-none'}`}>
+           <div className={`bg-primary-container p-8 rounded-2xl border-4 border-on-surface shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] space-y-5 max-w-sm w-full transition-all duration-700 ease-out transform pointer-events-auto relative z-[110] ${showGuestPrompt ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
              <div className="flex justify-between items-start">
-               <div className="bg-primary text-white p-2 rounded-lg border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                 <Icon name="lock" className="w-8 h-8" />
-               </div>
-               <button 
-                 type="button"
-                 onClick={(e) => {
-                   e.stopPropagation();
-                   navigate('/catalog');
-                 }} 
-                 className="text-on-surface hover:text-error transition-colors p-2 bg-white/20 rounded-full border border-on-surface/10"
-               >
-                 <Icon name="close" className="w-6 h-6" />
-               </button>
+               <div className="bg-primary text-white p-2 rounded-lg border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"><Icon name="lock" className="w-8 h-8" /></div>
+               <button type="button" onClick={() => navigate('/catalog')} className="text-on-surface hover:text-error transition-colors p-2 bg-white/20 rounded-full border border-on-surface/10"><Icon name="close" className="w-6 h-6" /></button>
              </div>
              <div className="space-y-2">
                <h3 className="font-headline-lg text-2xl font-black text-on-primary-container">Eits, Tunggu Dulu!</h3>
-               <p className="text-sm font-bold text-on-primary-container/80 leading-relaxed">
-                 Kamu sedang dalam mode tamu. Untuk membeli kursus ini dan mengakses materi lengkap, silakan daftar atau masuk ke akunmu ya!
-               </p>
+               <p className="text-sm font-bold text-on-primary-container/80 leading-relaxed">Kamu sedang dalam mode tamu. Untuk membeli kursus ini dan mengakses materi lengkap, silakan daftar atau masuk ke akunmu ya!</p>
              </div>
              <div className="space-y-3 pt-2">
-               <button
-                 type="button"
-                 onClick={(e) => {
-                   e.stopPropagation();
-                   navigate('/signup');
-                 }}
-                 className="w-full bg-primary text-white brutal-border py-4 text-lg font-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-               >
-                 <Icon name="person_add" className="w-5 h-5" />
-                 Daftar Sekarang — Gratis!
+               <button type="button" onClick={() => navigate('/signup')} className="w-full bg-primary text-white brutal-border py-4 text-lg font-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2 cursor-pointer">
+                 <Icon name="person_add" className="w-5 h-5" /> Daftar Sekarang — Gratis!
                </button>
-               <button
-                 type="button"
-                 onClick={(e) => {
-                   e.stopPropagation();
-                   navigate('/login');
-                 }}
-                 className="w-full bg-white text-on-surface border-4 border-on-surface py-3 text-sm font-black rounded-xl hover:bg-surface-container transition-all cursor-pointer"
-               >
-                 Sudah punya akun? Masuk
-               </button>
+               <button type="button" onClick={() => navigate('/login')} className="w-full bg-white text-on-surface border-4 border-on-surface py-3 text-sm font-black rounded-xl hover:bg-surface-container transition-all cursor-pointer">Sudah punya akun? Masuk</button>
              </div>
              <p className="text-[10px] text-center font-bold text-on-primary-container/50 uppercase tracking-widest">Harin Learning Student Portal</p>
            </div>
         </div>
       )}
+
 
     </div>
   );

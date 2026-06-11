@@ -32,6 +32,36 @@ const TeacherStudents = () => {
   const [certFile, setCertFile] = useState(null);
   const [certPreview, setCertPreview] = useState(null);
   const [uploadingCert, setUploadingCert] = useState(false);
+  const [codeModal, setCodeModal] = useState(null); // {title: string, code: string}
+  const [codeOutput, setCodeOutput] = useState("");
+
+  const handleRunCodeTeacher = (code) => {
+    setCodeOutput("🚀 Menjalankan kode...\n");
+    let logs = [];
+    const customConsole = {
+      log: (...args) => {
+        logs.push(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '));
+      },
+      error: (...args) => {
+        logs.push("❌ Error: " + args.join(' '));
+      }
+    };
+
+    setTimeout(() => {
+      try {
+        if (code.includes("eval") || code.includes("Function")) { 
+          throw new Error("Penggunaan eval atau Function tidak diizinkan."); 
+        }
+        
+        const runContext = new Function("console", code);
+        logs = [];
+        runContext(customConsole);
+        setCodeOutput(logs.length > 0 ? logs.join('\n') : "Berhasil dijalankan (tidak ada output console).");
+      } catch (err) { 
+        setCodeOutput(`❌ SYNTAX/RUNTIME ERROR:\n${err.message}`); 
+      }
+    }, 500);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -152,7 +182,7 @@ const TeacherStudents = () => {
       let submissions = [];
       const { data: subData, error: subErr } = await supabase
         .from('submissions')
-        .select('syllabus_id, course_id, file_url, submitted_at')
+        .select('syllabus_id, course_id, file_url, assignment_text, submitted_at')
         .eq('user_id', student.id)
         .in('course_id', courseIds)
         .order('submitted_at', { ascending: false });
@@ -160,7 +190,7 @@ const TeacherStudents = () => {
         console.warn('[openDetail] submissions (user_id) error:', subErr.message, '— trying student_id...');
         const { data: subData2 } = await supabase
           .from('submissions')
-          .select('syllabus_id, course_id, file_url, submitted_at')
+          .select('syllabus_id, course_id, file_url, assignment_text, submitted_at')
           .eq('student_id', student.id)
           .in('course_id', courseIds)
           .order('submitted_at', { ascending: false });
@@ -326,6 +356,43 @@ const TeacherStudents = () => {
         </div>
       )}
 
+      {/* Code Modal */}
+      {codeModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) { setCodeModal(null); setCodeOutput(""); } }}>
+          <div className="bg-[#181818] rounded-[32px] border-4 border-on-surface shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-3xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between p-6 border-b-2 border-white/10">
+              <div>
+                <h3 className="text-xl font-black text-white">Jawaban Coding</h3>
+                <p className="text-sm text-gray-400 font-bold mt-1">{codeModal.title}</p>
+              </div>
+              <button onClick={() => { setCodeModal(null); setCodeOutput(""); }} className="p-2 hover:bg-white/10 rounded-xl text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
+              <pre className="font-mono text-sm text-green-400 whitespace-pre-wrap flex-1">{codeModal.code}</pre>
+              
+              <div className="pt-4 border-t border-white/10">
+                <button 
+                  onClick={() => handleRunCodeTeacher(codeModal.code)}
+                  className="px-6 py-2 bg-green-500 text-black font-black uppercase text-xs rounded border-2 border-black shadow-[3px_3px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all mb-4"
+                >
+                  Run Code
+                </button>
+                {codeOutput && (
+                  <div className="p-4 bg-black rounded-lg border-2 border-white/10 font-mono text-xs text-white max-h-48 overflow-y-auto">
+                    <div className="flex items-center gap-2 mb-2 text-gray-500 border-b border-white/5 pb-1 uppercase text-[9px] font-black">
+                      <span className="material-symbols-outlined text-xs">terminal</span> Terminal Output
+                    </div>
+                    <pre className="whitespace-pre-wrap leading-relaxed">{codeOutput}</pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Detail Modal */}
       {selectedStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSelectedStudent(null); }}>
@@ -406,10 +473,17 @@ const TeacherStudents = () => {
                                   )}
                                 </div>
                                 {submission && (
-                                  <a href={submission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-primary underline flex items-center gap-1 flex-shrink-0">
-                                    <span className="material-symbols-outlined text-sm">attach_file</span>
-                                    Lihat Tugas
-                                  </a>
+                                  submission.file_url ? (
+                                    <a href={submission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-primary underline flex items-center gap-1 flex-shrink-0">
+                                      <span className="material-symbols-outlined text-sm">attach_file</span>
+                                      Lihat Tugas
+                                    </a>
+                                  ) : submission.assignment_text ? (
+                                    <button onClick={() => { setCodeModal({ title: syl.title, code: submission.assignment_text }); setCodeOutput(""); }} className="text-xs font-black text-primary underline flex items-center gap-1 flex-shrink-0 hover:text-primary-container-variant transition-colors cursor-pointer">
+                                      <span className="material-symbols-outlined text-sm">code</span>
+                                      Lihat Tugas
+                                    </button>
+                                  ) : null
                                 )}
                               </div>
                             );
@@ -421,7 +495,7 @@ const TeacherStudents = () => {
                               <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mb-2">Tugas Dikumpulkan ({courseSubs.length})</p>
                               {courseSubs.map((sub, i) => (
                                 <div key={i} className="flex items-center justify-between text-xs font-bold text-on-surface-variant py-1">
-                                  <span>📎 {sub.file_url?.split('/').pop()?.slice(0, 30) || 'file'}</span>
+                                  <span>{sub.file_url ? `📎 ${sub.file_url.split('/').pop().slice(0, 30)}` : '💻 Code Submission'}</span>
                                   <span>{new Date(sub.submitted_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
                                 </div>
                               ))}

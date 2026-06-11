@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
@@ -16,12 +16,15 @@ const TeacherCreateCourse = () => {
   const [categories, setCategories] = useState([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCatName, setNewCatName] = useState('');
+  const [courseStatus, setCourseStatus] = useState('draft'); // 'draft' | 'published' | 'locked'
+  const [showConfirmPublish, setShowConfirmPublish] = useState(false);
 
   // Collaboration States
   const [collaborators, setCollaborators] = useState([]);
   const [searchTeacherQuery, setSearchTeacherQuery] = useState('');
   const [foundTeachers, setFoundTeachers] = useState([]);
   const [isOwner, setIsOwner] = useState(true);
+  const [pendingInvites, setPendingInvites] = useState([]); // Array of teacher profiles to be invited after course creation
 
   // Form State
   const [formData, setFormData] = useState({
@@ -64,8 +67,8 @@ const TeacherCreateCourse = () => {
       }
       
       setCollaborators(finalData);
-    } catch (err) {
-      console.error('Error fetching collaborators:', err);
+    } catch {
+      console.error('Error fetching collaborators');
     }
   };
 
@@ -93,8 +96,8 @@ const TeacherCreateCourse = () => {
       try {
         const cats = await courseService.getCategories();
         setCategories(cats);
-      } catch (err) {
-        console.error(err);
+      } catch {
+        console.error('Error fetching categories');
       }
 
       // If Editing, Fetch Existing Data
@@ -114,16 +117,24 @@ const TeacherCreateCourse = () => {
             image_url: courseData.image_url
           });
           setCourseId(editId);
+          setCourseStatus(courseData.status || 'draft');
           setIsOwner(courseData.instructor_id === session.user.id);
           
           const content = await courseService.getCourseContent(editId);
           setSections(content);
           
+          // Check if course should be auto-locked (has students)
+          const { count } = await supabase.from('enrollments').select('id', { count: 'exact', head: true }).eq('course_id', editId);
+          if (count > 0 && courseData.status !== 'locked') {
+            await supabase.from('courses').update({ status: 'locked' }).eq('id', editId);
+            setCourseStatus('locked');
+          }
+          
           // Also fetch collaborators
           await fetchCollaborators(editId);
           
           setCurrentStep(2); // Jump to syllabus by default when editing
-        } catch (err) {
+        } catch {
           showToast('Gagal memuat data kursus.', 'error');
         } finally {
           setLoading(false);
@@ -142,7 +153,7 @@ const TeacherCreateCourse = () => {
       setNewCatName('');
       setShowAddCategory(false);
       showToast('Kategori baru berhasil ditambahkan!');
-    } catch (err) {
+    } catch {
       showToast('Gagal menambahkan kategori.', 'error');
     }
   };
@@ -169,14 +180,28 @@ const TeacherCreateCourse = () => {
     }
   };
 
-  const handleInviteCollaborator = async (targetTeacherId) => {
+  const handleInviteCollaborator = async (teacherProfile) => {
+    const targetTeacherId = teacherProfile.id;
     try {
-      const exists = collaborators.some(c => c.teacher_id === targetTeacherId);
-      if (exists) {
+      // Check if already in collaborators (from DB) or in pendingInvites
+      const existsInCollabs = collaborators.some(c => c.teacher_id === targetTeacherId);
+      const existsInPending = pendingInvites.some(p => p.id === targetTeacherId);
+      
+      if (existsInCollabs || existsInPending) {
         showToast('Guru tersebut sudah diundang atau sedang berkolaborasi.', 'error');
         return;
       }
 
+      if (!courseId) {
+        // If course not created yet, add to pending list
+        setPendingInvites(prev => [...prev, teacherProfile]);
+        showToast('Guru ditambahkan ke daftar kolaborator.');
+        setSearchTeacherQuery('');
+        setFoundTeachers([]);
+        return;
+      }
+
+      // If course exists, send invite to DB directly
       const { error } = await supabase
         .from('course_collaborators')
         .insert([{
@@ -192,25 +217,55 @@ const TeacherCreateCourse = () => {
       setSearchTeacherQuery('');
       setFoundTeachers([]);
       fetchCollaborators(courseId);
-    } catch (err) {
-      console.error(err);
+    } catch {
       showToast('Gagal mengirim undangan kolaborasi.', 'error');
     }
   };
 
-  const handleRemoveCollaborator = async (collabId) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus kolaborator ini dari course?')) return;
+  const handleRemoveCollaborator = async (id, isPending = false) => {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus kolaborator ini?')) return;
+    
+    if (isPending) {
+      setPendingInvites(prev => prev.filter(p => p.id !== id));
+      showToast('Kolaborator dihapus dari daftar.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('course_collaborators')
         .delete()
-        .eq('id', collabId);
+        .eq('id', id);
 
       if (error) throw error;
       showToast('Kolaborator berhasil dihapus.');
       fetchCollaborators(courseId);
-    } catch (err) {
+    } catch {
       showToast('Gagal menghapus kolaborator.', 'error');
+    }
+  };
+
+  const processPendingInvites = async (newCourseId) => {
+    if (pendingInvites.length === 0) return;
+    
+    try {
+      const invitePayloads = pendingInvites.map(p => ({
+        course_id: newCourseId,
+        teacher_id: p.id,
+        invited_by: user.id,
+        role: 'editor',
+        status: 'pending'
+      }));
+
+      const { error } = await supabase
+        .from('course_collaborators')
+        .insert(invitePayloads);
+
+      if (error) throw error;
+      setPendingInvites([]);
+    } catch (err) {
+      console.error('Error processing pending invites:', err);
+      showToast('Beberapa undangan kolaborasi gagal dikirim.', 'error');
     }
   };
 
@@ -231,8 +286,10 @@ const TeacherCreateCourse = () => {
         instructor_id: user.id,
         level: formData.level,
         language: formData.language,
-        image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop'
+        image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop',
+        status: courseId ? undefined : 'draft' // New courses always start as draft
       };
+      if (!courseId) delete payload.status; // Remove when updating
 
       if (courseId) {
         // Update existing course
@@ -257,9 +314,14 @@ const TeacherCreateCourse = () => {
           .single();
 
         if (error) throw error;
+        
+        // Process pending invites
+        await processPendingInvites(data.id);
+        
         setCourseId(data.id);
+        setCourseStatus('draft');
         setCurrentStep(2);
-        showToast('Kursus dibuat! Sekarang tambahkan materi pembelajaran.');
+        showToast('Kursus disimpan sebagai Draft! Tambahkan materi, lalu Publish saat siap.');
       }
     } catch (error) {
       showToast(friendlyError(error), 'error');
@@ -276,8 +338,65 @@ const TeacherCreateCourse = () => {
 
   const handlePublish = async (e) => {
     if (e) e.preventDefault();
-    showToast('Kursus berhasil diterbitkan dengan seluruh materi!');
-    navigate('/teacher/courses');
+    if (!courseId) { showToast('Simpan kursus terlebih dahulu.', 'error'); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('courses').update({ status: 'published' }).eq('id', courseId);
+      if (error) throw error;
+      setCourseStatus('published');
+      showToast('Kursus berhasil dipublikasikan! 🎉 Siswa sekarang dapat menemukan kursus ini.');
+      navigate('/teacher/courses');
+    } catch (err) {
+      showToast('Gagal mempublikasikan kursus: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveDraftAndExit = async (e) => {
+    if (e) e.preventDefault();
+    setLoading(true);
+    try {
+      if (currentStep === 1) {
+        if (!formData.title.trim()) { showToast('Judul kursus wajib diisi.', 'error'); return; }
+        if (!formData.category) { showToast('Kategori kursus wajib dipilih.', 'error'); return; }
+
+        const payload = {
+          title: formData.title,
+          category: formData.category,
+          price: parseFloat(formData.price) || 0,
+          description: formData.description,
+          instructor: user.full_name || 'Instructor',
+          instructor_id: user.id,
+          level: formData.level,
+          language: formData.language,
+          image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop',
+          status: 'draft'
+        };
+
+        if (courseId) {
+          const { error } = await supabase.from('courses').update(payload).eq('id', courseId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase.from('courses').insert([payload]).select().single();
+          if (error) throw error;
+          
+          // Process pending invites
+          await processPendingInvites(data.id);
+          
+          setCourseId(data.id);
+        }
+      } else {
+        const { error } = await supabase.from('courses').update({ status: 'draft' }).eq('id', courseId);
+        if (error) throw error;
+      }
+      showToast('Kursus berhasil disimpan sebagai Draft! 💾');
+      navigate('/teacher/courses');
+    } catch (err) {
+      showToast('Gagal menyimpan draft: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // --- Section Management ---
@@ -302,7 +421,7 @@ const TeacherCreateCourse = () => {
       setSections([...sections, { ...data, course_syllabus: [] }]);
       setSectionModalOpen(false);
       showToast('Section baru ditambahkan!');
-    } catch (err) {
+    } catch {
       showToast('Gagal menambahkan section.', 'error');
     }
   };
@@ -316,8 +435,9 @@ const TeacherCreateCourse = () => {
     assignment_text: '',
     file_url: '',
     type: 'material',
-    deadline: '',
-    allowed_file_types: 'pdf, docx, pptx'
+    allowed_file_types: 'pdf, docx, pptx',
+    initial_code: '',
+    test_cases: [{ input: '', expected: '' }]
   });
   const [syllabusModalOpen, setSyllabusModalOpen] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
@@ -329,24 +449,49 @@ const TeacherCreateCourse = () => {
       setEditingSyllabus({
         ...syllabus,
         type: syllabus.type || 'material',
-        deadline: syllabus.deadline ? new Date(syllabus.deadline).toISOString().split('T')[0] : '',
-        allowed_file_types: syllabus.allowed_file_types || 'pdf, docx, pptx'
+        allowed_file_types: syllabus.allowed_file_types || 'pdf, docx, pptx',
+        initial_code: syllabus.initial_code || '',
+        test_cases: syllabus.test_cases || [{ input: '', expected: '' }]
       });
     } else {
       setEditingSyllabus({
         id: null,
         section_id: sectionId,
-        title: '',
+        title: type === 'final_project' ? 'Final Project' : '',
         content: '',
         file_url: '',
         video_url: '',
         assignment_text: '',
         type: type,
-        deadline: '',
-        allowed_file_types: 'pdf, docx, pptx'
+        allowed_file_types: 'pdf, docx, pptx, zip',
+        initial_code: 'function solution(data) {\n  // Tulis kode Anda di sini\n  return data;\n}',
+        test_cases: [{ input: '', expected: '' }]
       });
     }
     setSyllabusModalOpen(true);
+  };
+
+  const handleAddFinalProject = async () => {
+    let fpSection = sections.find(s => s.title.toLowerCase() === 'final project' || s.title.toLowerCase() === 'tugas akhir');
+    
+    if (!fpSection) {
+      try {
+        const { data, error } = await supabase
+          .from('course_sections')
+          .insert([{ course_id: courseId, title: 'Final Project', sort_order: sections.length }])
+          .select()
+          .single();
+        if (error) throw error;
+        
+        fpSection = data;
+        setSections([...sections, { ...data, course_syllabus: [] }]);
+      } catch {
+        showToast('Gagal membuat section Final Project.', 'error');
+        return;
+      }
+    }
+
+    openSyllabusModal(fpSection.id, 'final_project');
   };
 
   const extractTextFromFile = async (file) => {
@@ -415,7 +560,7 @@ const TeacherCreateCourse = () => {
       }));
       
       showToast(extractedText ? 'File dibaca & diunggah!' : 'File diunggah!');
-    } catch (err) {
+    } catch {
       showToast('Gagal mengunggah file.', 'error');
     } finally {
       setLoading(false);
@@ -442,7 +587,7 @@ const TeacherCreateCourse = () => {
       
       setAiDraft(optimized);
       showToast('AI telah membaca isi file Anda!');
-    } catch (err) {
+    } catch {
       showToast('AI gagal merangkum isi file.', 'error');
     } finally {
       setOptimizing(false);
@@ -470,11 +615,55 @@ const TeacherCreateCourse = () => {
 
       showToast('Materi berhasil dihapus');
       setSyllabusModalOpen(false);
-      fetchCourseData();
+      const updatedSections = await courseService.getCourseContent(courseId);
+      setSections(updatedSections);
     } catch (err) {
       console.error(err);
       showToast('Gagal menghapus materi', 'error');
     }
+  };
+
+  const getEmbedUrl = (url) => {
+    if (!url) return '';
+    url = url.trim();
+    
+    let videoId = null;
+    
+    try {
+      if (url.includes('/embed/')) {
+        return url;
+      }
+      
+      if (url.includes('youtu.be/')) {
+        const parts = url.split('youtu.be/');
+        if (parts[1]) {
+          videoId = parts[1].split('?')[0].split('/')[0];
+        }
+      } else if (url.includes('/shorts/')) {
+        const parts = url.split('/shorts/');
+        if (parts[1]) {
+          videoId = parts[1].split('?')[0].split('/')[0];
+        }
+      } else if (url.includes('youtube.com')) {
+        const urlObj = new URL(url);
+        videoId = urlObj.searchParams.get('v');
+      }
+      
+      if (!videoId) {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) {
+          videoId = match[2];
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse YouTube URL:", e);
+    }
+    
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    return '';
   };
 
   const saveSyllabus = async () => {
@@ -486,18 +675,18 @@ const TeacherCreateCourse = () => {
     setLoading(true);
     try {
       // Pisahkan ID agar tidak ikut terkirim sebagai null saat insert
-      const { id, ...syllabusData } = editingSyllabus;
+      const syllabusData = { ...editingSyllabus };
+      delete syllabusData.id;
       
       const payload = {
         ...syllabusData,
         course_id: courseId,
-        is_published: true,
-        deadline: editingSyllabus.deadline || null
+        is_published: true
       };
 
       let error;
       if (editingSyllabus.id) {
-        ({ error } = await supabase.from('course_syllabus').update(payload).eq('id', editingSyllabus.id));
+        ({ error } = await supabase.from('course_syllabus').update(payload).eq(editingSyllabus.id));
       } else {
         ({ error } = await supabase.from('course_syllabus').insert([payload]));
       }
@@ -519,7 +708,7 @@ const TeacherCreateCourse = () => {
 
   return (
     <div className="bg-surface text-on-surface font-sans antialiased min-h-screen flex">
-      <TeacherSidebar user={user} />
+      <TeacherSidebar />
 
       {/* Main Content */}
       <main className="flex-1 lg:ml-[280px] pt-20 lg:pt-10 pb-24 lg:pb-8 px-margin-mobile lg:px-margin-desktop w-full max-w-[1440px] mx-auto min-h-screen">
@@ -535,7 +724,7 @@ const TeacherCreateCourse = () => {
           <div className="flex gap-3">
              <button 
               onClick={() => navigate('/teacher/courses')}
-              className="px-8 py-3 rounded-2xl border-4 border-on-surface font-black text-on-surface hover:bg-surface-variant transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
+               className="px-8 py-3 rounded-2xl border-4 border-on-surface font-black text-on-surface hover:bg-surface-variant transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
             >
               Cancel
             </button>
@@ -551,6 +740,20 @@ const TeacherCreateCourse = () => {
                 Edit Info & Collab
               </button>
             )}
+            
+            {/* Explicit Save Draft Button */}
+            {courseStatus !== 'locked' && courseStatus !== 'published' && (
+              <button
+                type="button"
+                onClick={handleSaveDraftAndExit}
+                disabled={loading}
+                className="px-8 py-3 rounded-2xl bg-white text-on-surface font-black border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <span>💾</span>
+                Simpan Draft
+              </button>
+            )}
+
             {currentStep === 1 ? (
               <button 
                 onClick={handleCreateCourseShell}
@@ -559,13 +762,24 @@ const TeacherCreateCourse = () => {
               >
                 {loading ? 'Processing...' : 'Next: Syllabus'}
               </button>
+            ) : courseStatus === 'locked' ? (
+              <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-error/10 border-4 border-error text-error font-black">
+                <span className="material-symbols-outlined text-lg">lock</span>
+                Terkunci
+              </div>
+            ) : courseStatus === 'published' ? (
+              <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-100 border-4 border-emerald-500 text-emerald-700 font-black">
+                <span className="material-symbols-outlined text-lg">public</span>
+                Sudah Published
+              </div>
             ) : (
               <button 
-                onClick={handlePublish}
+                type="button"
+                onClick={() => setShowConfirmPublish(true)}
                 disabled={loading}
-                className="px-8 py-3 rounded-2xl bg-primary text-on-primary font-black border-4 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 animate-bounce"
+                className="px-8 py-3 rounded-2xl bg-emerald-600 text-white font-black border-4 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50"
               >
-                Publish Course
+                🚀 Publish Course
               </button>
             )}
           </div>
@@ -718,7 +932,7 @@ const TeacherCreateCourse = () => {
               </section>
 
               {/* Collaboration Card */}
-              {courseId && (
+              {(courseId || !editId) && (
                 <section className="bg-white rounded-[40px] p-8 md:p-10 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                   <div className="flex items-center gap-4 mb-10">
                     <div className="w-12 h-12 bg-primary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
@@ -728,8 +942,8 @@ const TeacherCreateCourse = () => {
                   </div>
 
                   <div className="space-y-8">
-                    {/* Invite Section (Owner Only) */}
-                    {isOwner ? (
+                    {/* Invite Section (Owner or New Course Only) */}
+                    {(isOwner || !courseId) ? (
                       <div>
                         <label className="block mb-3 font-black text-sm text-on-surface-variant uppercase tracking-widest">Undang Guru Lain</label>
                         <div className="relative">
@@ -754,10 +968,10 @@ const TeacherCreateCourse = () => {
                                 </div>
                                 <button 
                                   type="button"
-                                  onClick={() => handleInviteCollaborator(t.id)}
+                                  onClick={() => handleInviteCollaborator(t)}
                                   className="bg-primary text-on-primary px-4 py-2 rounded-xl font-black text-xs border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all cursor-pointer"
                                 >
-                                  Undang
+                                  Tambah
                                 </button>
                               </div>
                             ))}
@@ -778,10 +992,39 @@ const TeacherCreateCourse = () => {
                     {/* Collaborator List */}
                     <div>
                       <h3 className="font-black text-sm text-on-surface-variant uppercase tracking-widest mb-4">Daftar Kolaborator</h3>
-                      {collaborators.length === 0 ? (
+                      {(collaborators.length === 0 && pendingInvites.length === 0) ? (
                         <p className="text-sm text-on-surface-variant font-bold italic">Belum ada kolaborator di course ini.</p>
                       ) : (
                         <div className="space-y-4">
+                          {/* Pending Invites (Local State) */}
+                          {pendingInvites.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-4 bg-primary-container/5 border-2 border-dashed border-primary rounded-2xl">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary-container border border-on-surface rounded-full flex items-center justify-center font-black text-sm text-on-primary-container">
+                                  {(p.full_name || 'G').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="font-black text-sm text-on-surface">{p.full_name || 'Guru'}</p>
+                                  <p className="text-xs text-on-surface-variant font-bold">@{p.username || 'username'}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="px-3 py-1 rounded-full text-[10px] font-black border border-primary bg-primary text-white uppercase">
+                                  Akan Diundang
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCollaborator(p.id, true)}
+                                  className="p-2 hover:bg-error-container text-error rounded-xl border border-transparent hover:border-on-surface transition-all cursor-pointer flex items-center justify-center"
+                                  title="Hapus"
+                                >
+                                  <span className="material-symbols-outlined text-sm font-black">delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Existing Collaborators (DB State) */}
                           {collaborators.map(c => (
                             <div key={c.id} className="flex items-center justify-between p-4 bg-surface border-2 border-on-surface rounded-2xl">
                               <div className="flex items-center gap-3">
@@ -870,7 +1113,32 @@ const TeacherCreateCourse = () => {
         ) : (
           /* Step 2: Syllabus Management */
           <div className="space-y-10 pb-20">
-            {sections.length === 0 && (
+            {/* Status Banner */}
+          {courseStatus === 'locked' && (
+            <div className="flex items-start gap-4 p-6 bg-error/5 border-4 border-error rounded-[32px] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <span className="material-symbols-outlined text-error text-3xl mt-0.5">lock</span>
+              <div>
+                <h3 className="font-black text-error text-lg">Kursus Terkunci</h3>
+                <p className="text-sm text-on-surface-variant font-bold mt-1">
+                  Kursus ini tidak dapat diedit karena sudah ada student yang terdaftar (enrolled). Ini untuk menjaga konsistensi materi bagi semua student yang sedang belajar.
+                  Untuk pertanyaan, silakan hubungi administrator.
+                </p>
+              </div>
+            </div>
+          )}
+          {courseStatus === 'draft' && (
+            <div className="flex items-start gap-4 p-6 bg-primary-container/30 border-4 border-primary rounded-[32px] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <span className="material-symbols-outlined text-primary text-3xl mt-0.5">edit_note</span>
+              <div>
+                <h3 className="font-black text-primary text-lg">Mode Draft</h3>
+                <p className="text-sm text-on-surface-variant font-bold mt-1">
+                  Kursus ini masih dalam tahap pengembangan dan belum terlihat oleh student. Klik <strong>"🚀 Publish Course"</strong> di atas saat sudah siap untuk dipublikasikan.
+                </p>
+              </div>
+            </div>
+          )}
+
+            {sections.length === 0 && courseStatus !== 'locked' && (
               <div className="text-center py-20 bg-white rounded-[40px] border-4 border-dashed border-on-surface">
                 <Icon name="library_add" className="w-16 h-16 mx-auto mb-4 opacity-20" />
                 <p className="font-black text-xl mb-6">Belum ada materi pembelajaran.</p>
@@ -903,19 +1171,25 @@ const TeacherCreateCourse = () => {
                     >
                       <Icon name="assignment" className="w-5 h-5" /> Tambah Tugas
                     </button>
+                    <button 
+                      onClick={() => openSyllabusModal(section.id, 'coding')}
+                      className="flex items-center gap-2 bg-tertiary-container text-tertiary px-6 py-2 rounded-xl border-2 border-on-surface font-black shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all"
+                    >
+                      <Icon name="code" className="w-5 h-5" /> Tambah Tugas Coding
+                    </button>
                   </div>
                 </div>
 
                 <div className="p-8 space-y-4">
                   {section.course_syllabus?.length === 0 && <p className="text-on-surface-variant font-bold italic">Belum ada materi di section ini.</p>}
-                  {section.course_syllabus?.map((syl, sylIdx) => (
+                  {section.course_syllabus?.map((syl) => (
                     <div key={syl.id} className="flex items-center justify-between p-4 bg-surface border-2 border-on-surface rounded-2xl hover:bg-surface-variant/10 transition-colors">
                       <div className="flex items-center gap-4">
-                        <Icon name="article" className="w-6 h-6 text-primary" />
+                        <Icon name={syl.type === 'final_project' ? 'workspace_premium' : syl.type === 'coding' ? 'code' : 'article'} className="w-6 h-6 text-primary" />
                         <div>
                           <p className="font-black">{syl.title}</p>
                           <p className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">
-                            {syl.file_url ? 'FILE ' : ''}{syl.video_url ? '• VIDEO ' : ''}{syl.assignment_text ? '• ASSIGNMENT' : ''}
+                            {syl.type === 'final_project' ? 'FINAL PROJECT ' : syl.type === 'coding' ? 'CODING ASSIGNMENT ' : (syl.file_url ? 'FILE ' : '') + (syl.video_url ? '• VIDEO ' : '') + (syl.assignment_text ? '• ASSIGNMENT' : '')}
                           </p>
                         </div>
                       </div>
@@ -934,12 +1208,20 @@ const TeacherCreateCourse = () => {
             ))}
 
             {sections.length > 0 && (
-              <button 
-                onClick={handleOpenSectionModal}
-                className="w-full py-6 rounded-[40px] border-4 border-dashed border-on-surface hover:bg-surface-variant/10 font-black text-xl flex items-center justify-center gap-3 transition-all"
-              >
-                <Icon name="add_circle" className="w-8 h-8" /> Tambah Section Baru
-              </button>
+              <div className="flex flex-col gap-4">
+                <button 
+                  onClick={handleOpenSectionModal}
+                  className="w-full py-6 rounded-[40px] border-4 border-dashed border-on-surface hover:bg-surface-variant/10 font-black text-xl flex items-center justify-center gap-3 transition-all"
+                >
+                  <Icon name="add_circle" className="w-8 h-8" /> Tambah Section Baru
+                </button>
+                <button 
+                  onClick={handleAddFinalProject}
+                  className="w-full py-6 rounded-[40px] bg-primary-container text-on-primary-container border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none font-black text-xl flex items-center justify-center gap-3 transition-all"
+                >
+                  <Icon name="workspace_premium" className="w-8 h-8" /> Tambah Tugas Akhir (Final Project)
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -989,8 +1271,8 @@ const TeacherCreateCourse = () => {
             <div className="bg-white border-4 border-on-surface rounded-[40px] shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
               <div className="p-8 border-b-4 border-on-surface flex justify-between items-center bg-surface">
                 <div>
-                  <h2 className="text-3xl font-black">{editingSyllabus.id ? 'Edit' : 'Add New'} {editingSyllabus.type === 'assignment' ? 'Assignment' : 'Syllabus'}</h2>
-                  <p className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest">{editingSyllabus.type === 'assignment' ? 'Penugasan & Latihan' : 'Materi Pembelajaran'}</p>
+                  <h2 className="text-3xl font-black">{editingSyllabus.id ? 'Edit' : 'Add New'} {editingSyllabus.type === 'assignment' ? 'Assignment' : editingSyllabus.type === 'final_project' ? 'Final Project' : 'Syllabus'}</h2>
+                  <p className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest">{editingSyllabus.type === 'assignment' ? 'Penugasan & Latihan' : editingSyllabus.type === 'final_project' ? 'Evaluasi Akhir' : 'Materi Pembelajaran'}</p>
                 </div>
                 <button onClick={() => setSyllabusModalOpen(false)} className="p-2 hover:rotate-90 transition-transform"><Icon name="close" className="w-8 h-8" /></button>
               </div>
@@ -1000,47 +1282,35 @@ const TeacherCreateCourse = () => {
                   {/* Left Column: Form Inputs */}
                   <div className="space-y-8">
                     <div>
-                      <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Judul {editingSyllabus.type === 'assignment' ? 'Tugas' : 'Materi'}</label>
+                      <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Judul {editingSyllabus.type === 'assignment' || editingSyllabus.type === 'final_project' ? 'Tugas' : 'Materi'}</label>
                       <input 
                         className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-black text-on-surface outline-none" 
-                        placeholder={editingSyllabus.type === 'assignment' ? "Contoh: Latihan Fundamental UI/UX" : "Contoh: Pengenalan Dasar UI"} 
+                        placeholder={editingSyllabus.type === 'assignment' ? "Contoh: Latihan Fundamental UI/UX" : editingSyllabus.type === 'final_project' ? "Contoh: Ujian Akhir Kelas" : "Contoh: Pengenalan Dasar UI"} 
                         value={editingSyllabus.title}
                         onChange={e => setEditingSyllabus({...editingSyllabus, title: e.target.value})}
                       />
                     </div>
 
-                    {editingSyllabus.type === 'assignment' ? (
-                      <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Deadline Pengumpulan</label>
-                            <input 
-                              type="date"
-                              className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-black text-on-surface outline-none" 
-                              value={editingSyllabus.deadline}
-                              onChange={e => setEditingSyllabus({...editingSyllabus, deadline: e.target.value})}
-                            />
-                          </div>
-                          <div>
-                            <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Format File (Pisah Koma)</label>
-                            <input 
-                              className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-black text-on-surface outline-none" 
-                              placeholder="pdf, zip, png, jpg" 
-                              value={editingSyllabus.allowed_file_types}
-                              onChange={e => setEditingSyllabus({...editingSyllabus, allowed_file_types: e.target.value})}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Instruksi Tugas</label>
-                          <textarea 
-                            className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-bold text-on-surface outline-none min-h-[150px]" 
-                            placeholder="Jelaskan detail tugas yang harus dikerjakan siswa..." 
-                            value={editingSyllabus.assignment_text}
-                            onChange={e => setEditingSyllabus({...editingSyllabus, assignment_text: e.target.value})}
-                          />
-                        </div>
-                      </>
+                    {editingSyllabus.type === 'assignment' || editingSyllabus.type === 'final_project' ? (
+                      <div>
+                        <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Instruksi {editingSyllabus.type === 'final_project' ? 'Tugas Akhir' : 'Tugas'}</label>
+                        <textarea 
+                          className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-bold text-on-surface outline-none min-h-[150px]" 
+                          placeholder="Jelaskan detail tugas yang harus dikerjakan siswa..." 
+                          value={editingSyllabus.assignment_text}
+                          onChange={e => setEditingSyllabus({...editingSyllabus, assignment_text: e.target.value})}
+                        />
+                      </div>
+                    ) : editingSyllabus.type === 'coding' ? (
+                      <div>
+                        <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Instruksi / Penjelasan Soal</label>
+                        <textarea 
+                          className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-bold text-on-surface outline-none min-h-[150px]" 
+                          placeholder="Jelaskan apa yang harus dikerjakan siswa dalam tantangan coding ini..." 
+                          value={editingSyllabus.content}
+                          onChange={e => setEditingSyllabus({...editingSyllabus, content: e.target.value})}
+                        />
+                      </div>
                     ) : (
                       <>
                         <div>
@@ -1080,6 +1350,18 @@ const TeacherCreateCourse = () => {
                             value={editingSyllabus.video_url}
                             onChange={e => setEditingSyllabus({...editingSyllabus, video_url: e.target.value})}
                           />
+                          {getEmbedUrl(editingSyllabus.video_url) && (
+                            <div className="mt-4 rounded-2xl overflow-hidden border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-black aspect-video">
+                              <iframe 
+                                className="w-full h-full" 
+                                src={getEmbedUrl(editingSyllabus.video_url)} 
+                                title="YouTube Preview" 
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowFullScreen 
+                              />
+                            </div>
+                          )}
                         </div>
                       </>
                     )}
@@ -1141,11 +1423,27 @@ const TeacherCreateCourse = () => {
                           )}
                         </div>
                       </>
+                    ) : editingSyllabus.type === 'coding' ? (
+                      <div className="space-y-6 flex flex-col h-full">
+                        <div className="flex-1">
+                          <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Initial Code (JS)</label>
+                          <textarea 
+                            className="w-full rounded-2xl border-4 border-on-surface bg-[#181818] text-green-400 font-mono text-xs p-6 outline-none h-full min-h-[300px] resize-none" 
+                            placeholder="function solution(data) { ... }" 
+                            value={editingSyllabus.initial_code}
+                            onChange={e => setEditingSyllabus({...editingSyllabus, initial_code: e.target.value})}
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <div className="h-full flex flex-col justify-center items-center text-center p-10 bg-surface-variant/10 rounded-[40px] border-4 border-on-surface border-dashed">
-                        <Icon name="assignment_turned_in" className="w-20 h-20 text-secondary mb-6" />
-                        <h3 className="text-2xl font-black mb-2">Penugasan Terstruktur</h3>
-                        <p className="text-sm font-bold text-on-surface-variant">Tugas ini akan muncul sebagai item terpisah bagi siswa. Siswa dapat mengunggah file hasil pekerjaannya sebelum deadline.</p>
+                        <Icon name={editingSyllabus.type === 'final_project' ? 'workspace_premium' : 'assignment_turned_in'} className={`w-20 h-20 mb-6 ${editingSyllabus.type === 'final_project' ? 'text-primary' : 'text-secondary'}`} />
+                        <h3 className="text-2xl font-black mb-2">{editingSyllabus.type === 'final_project' ? 'Tugas Akhir (Final Project)' : 'Penugasan Terstruktur'}</h3>
+                        <p className="text-sm font-bold text-on-surface-variant">
+                          {editingSyllabus.type === 'final_project' 
+                            ? 'Final Project ini menjadi syarat kelulusan siswa.' 
+                            : 'Tugas ini akan muncul sebagai item terpisah bagi siswa. Siswa dapat mengunggah file hasil pekerjaannya kapan saja.'}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1174,7 +1472,7 @@ const TeacherCreateCourse = () => {
                     disabled={loading}
                     className="px-10 py-4 bg-primary text-on-primary rounded-2xl border-4 border-on-surface font-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all"
                   >
-                    {loading ? 'Saving...' : `Save ${editingSyllabus.type === 'assignment' ? 'Assignment' : 'Syllabus'}`}
+                    {loading ? 'Saving...' : `Save ${editingSyllabus.type === 'assignment' ? 'Assignment' : editingSyllabus.type === 'final_project' ? 'Final Project' : 'Syllabus'}`}
                   </button>
                 </div>
               </div>
@@ -1182,6 +1480,63 @@ const TeacherCreateCourse = () => {
           </div>
         )}
       </main>
+
+      {/* Confirmation Modal */}
+      {showConfirmPublish && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-[32px] border-4 border-on-surface p-8 max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] text-on-surface">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-primary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
+                <span className="material-symbols-outlined text-on-primary-container text-2xl font-bold">help</span>
+              </div>
+              <h3 className="text-2xl font-black">Publish Kursus?</h3>
+            </div>
+            
+            <p className="text-on-surface-variant font-medium leading-relaxed mb-8">
+              Apakah Anda yakin ingin mempublikasikan kursus <strong>{formData.title}</strong>? Setelah dipublikasikan, kursus akan dapat diakses dan di-enroll oleh siswa di Katalog.
+              <br /><br />
+              Kami menyarankan Anda untuk mengecek tampilannya terlebih dahulu menggunakan <strong>Preview Mode</strong>.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              {/* Preview Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmPublish(false);
+                  navigate(`/teacher/courses/preview/${courseId}?from=edit`);
+                }}
+                className="w-full py-3.5 rounded-2xl bg-primary-container text-on-primary-container font-black border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all flex justify-center items-center gap-2"
+              >
+                <span className="material-symbols-outlined">visibility</span>
+                Cek Tampilan Dulu (Preview)
+              </button>
+
+              {/* Confirm Publish */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  setShowConfirmPublish(false);
+                  handlePublish(e);
+                }}
+                className="w-full py-3.5 rounded-2xl bg-emerald-600 text-white font-black border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all flex justify-center items-center gap-2"
+              >
+                <span className="material-symbols-outlined">public</span>
+                Ya, Publikasikan Sekarang
+              </button>
+
+              {/* Cancel */}
+              <button
+                type="button"
+                onClick={() => setShowConfirmPublish(false)}
+                className="w-full py-3 rounded-2xl border-4 border-outline text-on-surface-variant font-bold hover:bg-surface-variant transition-all text-center"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
