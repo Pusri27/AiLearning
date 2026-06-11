@@ -46,12 +46,6 @@ const CourseDetail = () => {
   const [userCertificate, setUserCertificate] = useState(null);
   const [showCertPreview, setShowCertPreview] = useState(false);
 
-  const handleContinueLearning = () => {
-    const nextLesson = lessons.find(l => !l.completed) || lessons[0];
-    if (nextLesson) {
-      navigate(`/courses/${id}/learn/${nextLesson.id}`);
-    }
-  };
 
   const handlePrintCertificate = (cert) => {
     const printWindow = window.open('', '_blank', 'width=900,height=650');
