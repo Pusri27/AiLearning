@@ -18,10 +18,12 @@ const Catalog = () => {
   const [search,   setSearch]   = useState('');
   const [sortBy,   setSortBy]   = useState('newest');
   const [ratingsMap, setRatingsMap] = useState({});
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState([]);
 
   useEffect(() => {
     const fetchCourses = async () => {
       setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
       const { data, error } = await supabase.from('courses').select('*').eq('status', 'published').order('created_at', { ascending: false });
       if (!error && data) {
         setCourses(data);
@@ -38,6 +40,25 @@ const Catalog = () => {
             rMap[r.course_id].push(r.rating);
           });
           setRatingsMap(rMap);
+        }
+      }
+
+      if (session) {
+        const { data: enrollments } = await supabase
+          .from('enrollments')
+          .select('course_id')
+          .eq('user_id', session.user.id);
+        if (enrollments) {
+          setEnrolledCourseIds(enrollments.map(e => e.course_id));
+        }
+      } else {
+        const guestEnrollments = localStorage.getItem('harin_guest_enrollments');
+        if (guestEnrollments) {
+          try {
+            setEnrolledCourseIds(JSON.parse(guestEnrollments));
+          } catch (e) {
+            console.error('Error parsing guest enrollments:', e);
+          }
         }
       }
       setLoading(false);
@@ -211,6 +232,12 @@ const Catalog = () => {
                     <div className="absolute top-4 left-4 bg-tertiary text-white px-3 py-1 border-2 border-on-surface font-black uppercase text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                       {course.category}
                     </div>
+                    {enrolledCourseIds.includes(course.id) && (
+                      <div className="absolute top-4 right-4 bg-emerald-500 text-white px-3 py-1 border-2 border-on-surface font-black uppercase text-[10px] flex items-center gap-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] z-10 rounded">
+                        <Icon name="check_circle" className="w-3.5 h-3.5" />
+                        {profile.language === 'en' ? 'Owned' : profile.language === 'ja' ? '所有済' : profile.language === 'zh' ? '已购买' : 'Dimiliki'}
+                      </div>
+                    )}
                   </div>
                   <div className="p-6 flex flex-col flex-grow">
                     <h3 className="font-headline-md mb-1 line-clamp-2">{course.title}</h3>
@@ -227,7 +254,14 @@ const Catalog = () => {
                           <span className="text-[10px] text-on-surface-variant font-bold">({ratingsMap[course.id].length})</span>
                         )}
                       </div>
-                      <span className="font-headline-md text-primary">{formatPrice(course.price)}</span>
+                      {enrolledCourseIds.includes(course.id) ? (
+                        <span className="bg-emerald-400 text-on-surface font-black text-xs px-3 py-1.5 border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5 rounded transition-transform group-hover:translate-x-[-1px] group-hover:translate-y-[-1px] group-hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                          <Icon name="menu_book" className="w-4 h-4" />
+                          {profile.language === 'en' ? 'LEARN' : profile.language === 'ja' ? '学習' : profile.language === 'zh' ? '学习' : 'BELAJAR'}
+                        </span>
+                      ) : (
+                        <span className="font-headline-md text-primary">{formatPrice(course.price)}</span>
+                      )}
                     </div>
                   </div>
                 </div>

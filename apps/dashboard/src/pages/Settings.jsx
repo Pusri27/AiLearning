@@ -303,10 +303,14 @@ const Settings = () => {
 
   // ── Load session ──────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) { navigate('/login'); return; }
-      setUser(session.user);
-      setEmail(session.user.email || '');
+    supabase.auth.getUser().then(({ data: { user }, error }) => {
+      if (error || !user) {
+        supabase.auth.signOut();
+        navigate('/login');
+        return;
+      }
+      setUser(user);
+      setEmail(user.email || '');
     });
   }, [navigate]);
 

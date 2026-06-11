@@ -35,6 +35,111 @@ const CourseDetail = () => {
     return text.split('.')[0] + '.';
   };
 
+  // Helper: Calculate Hours based on video count
+  const calculateHours = () => {
+    const videoCount = syllabus.filter(s => s.video_url).length;
+    if (videoCount === 0) return '2 Hours'; // Min hours
+    return `${videoCount * 0.5} Hours`; // Estimate 30 mins per video
+  };
+
+  const [enrollmentId, setEnrollmentId] = useState(null);
+  const [userCertificate, setUserCertificate] = useState(null);
+  const [showCertPreview, setShowCertPreview] = useState(false);
+
+  const handleContinueLearning = () => {
+    const nextLesson = lessons.find(l => !l.completed) || lessons[0];
+    if (nextLesson) {
+      navigate(`/courses/${id}/learn/${nextLesson.id}`);
+    }
+  };
+
+  const handlePrintCertificate = (cert) => {
+    const printWindow = window.open('', '_blank', 'width=900,height=650');
+    const formattedDate = cert.issued_at ? new Date(cert.issued_at).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }) : new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    const studentName = profile?.fullName || profile?.full_name || "Pelajar Premium";
+    const courseTitle = cert.courses?.title || "Kelas AiLearning";
+    
+    const rawId = cert.id && String(cert.id).startsWith('cert-') ? cert.id.replace('cert-', '') : cert.id;
+    const certId = `CERT-${rawId || 'ONLINE'}-${String(profile?.id || 'GUEST').slice(0, 8).toUpperCase()}`;
+
+    const content = `
+      <div style="font-family:'Outfit', 'Inter', sans-serif; display:flex; justify-content:center; align-items:center; min-height:98vh; background:#fefefe; padding:20px; box-sizing:border-box;">
+        <div style="width:100%; max-width:800px; border:10px double #000; padding:40px; background:#fffcf5; text-align:center; position:relative; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+          <div style="position:absolute; top:15px; left:15px; width:40px; height:40px; border-top:4px solid #000; border-left:4px solid #000;"></div>
+          <div style="position:absolute; top:15px; right:15px; width:40px; height:40px; border-top:4px solid #000; border-right:4px solid #000;"></div>
+          <div style="position:absolute; bottom:15px; left:15px; width:40px; height:40px; border-bottom:4px solid #000; border-left:4px solid #000;"></div>
+          <div style="position:absolute; bottom:15px; right:15px; width:40px; height:40px; border-bottom:4px solid #000; border-right:4px solid #000;"></div>
+          
+          <div style="font-size:24px; font-weight:900; letter-spacing:4px; margin-bottom:20px; text-transform:uppercase;">AiLearning Academy</div>
+          <div style="font-size:38px; font-weight:900; color:#000; text-transform:uppercase; margin-bottom:30px; border-bottom:4px solid #000; display:inline-block; padding-bottom:10px; letter-spacing:1px;">SERTIFIKAT KELULUSAN</div>
+          
+          <div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Diberikan Kepada</div>
+          <div style="font-size:34px; font-weight:900; color:#000; text-decoration:underline; text-transform:capitalize; margin-bottom:25px; font-style:italic;">${studentName}</div>
+          
+          <div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Atas Keberhasilannya Menyelesaikan Kelas</div>
+          <div style="font-size:26px; font-weight:900; color:#2563eb; margin-bottom:40px; line-height:1.3;">${courseTitle}</div>
+          
+          <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:50px; padding:0 30px;">
+            <div style="text-align:left;">
+              <div style="font-size:12px; font-weight:700; color:#6b7280; text-transform:uppercase;">Tanggal Kelulusan</div>
+              <div style="font-size:15px; font-weight:900; color:#000; margin-top:5px;">${formattedDate}</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="width:120px; height:2px; background:#000; margin-bottom:8px;"></div>
+              <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:#000;">Harin AI System</div>
+              <div style="font-size:10px; font-weight:700; color:#6b7280;">Verifikasi Resmi</div>
+            </div>
+          </div>
+          
+          <div style="margin-top:40px; font-size:10px; font-weight:700; color:#9ca3af; letter-spacing:1px;">ID Verifikasi: ${certId}</div>
+        </div>
+      </div>
+    `;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Sertifikat Kelulusan - ${studentName}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+          <style>
+            body { margin: 0; padding: 0; background-color: #ffffff; }
+            @media print {
+              body { background: none; }
+              @page { size: landscape; margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          ${content}
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  useEffect(() => {
+    fetchCourse();
+    if (isGuest) {
+      const timer = setTimeout(() => setShowGuestPrompt(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [id, isGuest]);
+
   const fetchCourse = useCallback(async () => {
     setLoading(true);
     try {
@@ -117,9 +222,10 @@ const CourseDetail = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           const { data: enrollment } = await supabase
-            .from('enrollments').select('id, progress').eq('user_id', session.user.id).eq('course_id', id).maybeSingle();
+            .from('enrollments').select('id, progress, enrolled_at').eq('user_id', session.user.id).eq('course_id', id).maybeSingle();
           if (enrollment) {
             setIsEnrolled(true);
+            setEnrollmentId(enrollment.id);
             const { data: userProgress } = await supabase
               .from('user_progress').select('syllabus_id').eq('user_id', session.user.id).eq('course_id', id);
 
@@ -128,7 +234,15 @@ const CourseDetail = () => {
               let t = 'reading'; let ic = 'menu_book';
               if (item.type === 'assignment') { t = 'assignment'; ic = 'assignment'; }
               else if (item.video_url) { t = 'video'; ic = 'play_circle'; }
-              return { id: item.id, title: item.title, duration: item.type === 'assignment' ? 'Penugasan' : '30 mins', type: t, icon: ic, completed: isComp };
+              return { 
+                id: item.id, 
+                title: item.title, 
+                duration: item.type === 'assignment' ? 'Penugasan' : '30 mins', 
+                type: t, 
+                icon: ic, 
+                content: item.content || item.assignment_text || '',
+                completed: isComp 
+              };
             });
             setLessons(mappedLessons);
             const compCount = mappedLessons.filter(l => l.completed).length;
@@ -136,6 +250,30 @@ const CourseDetail = () => {
             setEnrollmentProgress(newProg);
             if (newProg !== enrollment.progress) {
               await supabase.from('enrollments').update({ progress: newProg }).eq('id', enrollment.id);
+            }
+
+            // Fetch certificate or synthesize auto-generated certificate if progress is 100%
+            const { data: certData } = await supabase
+              .from('certificates')
+              .select('id, course_id, issued_at, certificate_url')
+              .eq('user_id', session.user.id)
+              .eq('course_id', id)
+              .maybeSingle();
+
+            if (certData) {
+              setUserCertificate({
+                ...certData,
+                courses: courseData
+              });
+            } else if (newProg === 100) {
+              setUserCertificate({
+                id: `cert-${id}`,
+                course_id: id,
+                issued_at: enrollment.enrolled_at || new Date().toISOString(),
+                certificate_url: null,
+                courses: courseData,
+                isAutoGenerated: true
+              });
             }
           }
         }
@@ -268,14 +406,25 @@ const CourseDetail = () => {
               <div className="mb-8">
                 <span className="text-3xl font-headline-xl text-primary">{formatPrice(course.price)}</span>
               </div>
-              <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+              <div className="flex flex-col sm:flex-row gap-4 mt-auto w-full">
                 {isEnrolled ? (
-                  <button 
-                    onClick={handleContinueLearning}
-                    className="px-8 py-4 bg-primary text-white rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1"
-                  >
-                    Lanjutkan Belajar
-                  </button>
+                  <>
+                    <button 
+                      onClick={handleContinueLearning}
+                      className="px-8 py-4 bg-primary text-white rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1"
+                    >
+                      {enrollmentProgress === 100 ? 'Pelajari Kembali' : 'Lanjutkan Belajar'}
+                    </button>
+                    {enrollmentProgress === 100 && (
+                      <button 
+                        onClick={() => setShowCertPreview(true)}
+                        className="px-8 py-4 bg-[#FFB800] text-on-background rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1 flex items-center justify-center gap-2"
+                      >
+                        <Icon name="workspace_premium" className="w-6 h-6" />
+                        Lihat Sertifikat
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     <button 
@@ -505,6 +654,120 @@ const CourseDetail = () => {
         </div>
       )}
 
+      {/* Certificate Preview Modal */}
+      {showCertPreview && userCertificate && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-surface border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-4 border-b-2 border-on-surface bg-primary-container shrink-0">
+              <span className="font-headline-sm font-black text-on-primary-container flex items-center gap-2">
+                <Icon name="workspace_premium" className="w-6 h-6 text-primary" />
+                Pratinjau Sertifikat
+              </span>
+              <button 
+                onClick={() => setShowCertPreview(false)}
+                className="text-on-surface hover:text-error transition-colors p-1 bg-white/20 rounded-full border border-on-surface/10"
+              >
+                <Icon name="close" className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-surface-container-lowest flex items-center justify-center min-h-[300px]">
+              {userCertificate.certificate_url ? (
+                // Custom Certificate Preview
+                <div className="w-full max-w-2xl border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden rounded-xl bg-white aspect-video relative">
+                  {userCertificate.certificate_url.endsWith('.pdf') ? (
+                    <iframe 
+                      src={`${userCertificate.certificate_url}#toolbar=0`}
+                      className="w-full h-full border-none"
+                      title="PDF Preview"
+                    />
+                  ) : (
+                    <img 
+                      src={userCertificate.certificate_url}
+                      alt="Sertifikat"
+                      className="w-full h-full object-contain"
+                    />
+                  )}
+                </div>
+              ) : (
+                // Auto-Generated Certificate HTML Preview
+                <div className="w-full max-w-2xl border-4 border-on-surface bg-[#fffcf5] p-6 md:p-10 text-center relative shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] font-sans" style={{ borderStyle: 'double', borderWidth: '10px' }}>
+                  <div className="absolute top-3 left-3 w-8 h-8 border-t-2 border-l-2 border-on-surface border-t-black border-l-black"></div>
+                  <div className="absolute top-3 right-3 w-8 h-8 border-t-2 border-right-2 border-on-surface border-t-black border-r-black"></div>
+                  <div className="absolute bottom-3 left-3 w-8 h-8 border-b-2 border-l-2 border-on-surface border-b-black border-l-black"></div>
+                  <div className="absolute bottom-3 right-3 w-8 h-8 border-b-2 border-right-2 border-on-surface border-b-black border-r-black"></div>
+                  
+                  <div className="text-[12px] md:text-sm font-black tracking-widest text-on-surface-variant/80 uppercase mb-2">AiLearning Academy</div>
+                  <div className="text-xl md:text-3xl font-black text-on-surface border-b-2 border-on-surface inline-block pb-1 mb-4 uppercase">SERTIFIKAT KELULUSAN</div>
+                  
+                  <div className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Diberikan Kepada</div>
+                  <div className="text-lg md:text-2xl font-black text-on-surface underline italic mb-4 capitalize">
+                    {profile?.fullName || profile?.full_name || "Pelajar Premium"}
+                  </div>
+                  
+                  <div className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Atas Keberhasilannya Menyelesaikan Kelas</div>
+                  <div className="text-sm md:text-lg font-black text-primary leading-tight mb-6">
+                    {userCertificate.courses?.title || "Kelas AiLearning"}
+                  </div>
+                  
+                  <div className="flex justify-between items-end mt-4 md:mt-8 px-2 text-left">
+                    <div>
+                      <div className="text-[8px] md:text-[10px] font-bold text-on-surface-variant uppercase">Tanggal Kelulusan</div>
+                      <div className="text-[10px] md:text-xs font-black text-on-surface mt-0.5">
+                        {userCertificate.issued_at ? new Date(userCertificate.issued_at).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric'
+                        }) : 'Baru saja'}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="w-16 md:w-24 h-0.5 bg-on-surface mb-1"></div>
+                      <div className="text-[8px] md:text-[10px] font-black uppercase text-on-surface">Harin AI System</div>
+                      <div className="text-[6px] md:text-[8px] font-bold text-on-surface-variant">Verifikasi Resmi</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 md:mt-6 text-[8px] font-bold text-on-surface-variant/60 tracking-wider">
+                    ID: CERT-{(userCertificate.id && String(userCertificate.id).startsWith('cert-') ? userCertificate.id.replace('cert-', '') : userCertificate.id || 'ONLINE').toUpperCase()}-{String(profile?.id || 'GUEST').slice(0, 8).toUpperCase()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t-2 border-on-surface bg-surface-container flex justify-end gap-3 shrink-0">
+              <button
+                onClick={() => setShowCertPreview(false)}
+                className="px-5 py-2 bg-white text-on-surface border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg font-bold text-sm hover:bg-surface-container transition-all"
+              >
+                Tutup
+              </button>
+              {userCertificate.certificate_url ? (
+                <a
+                  href={userCertificate.certificate_url}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2 bg-primary text-white border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg font-black text-sm hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                >
+                  <Icon name="download" className="w-4 h-4" />
+                  Unduh / Simpan PDF
+                </a>
+              ) : (
+                <button
+                  onClick={() => handlePrintCertificate(userCertificate)}
+                  className="px-5 py-2 bg-[#FFB800] text-on-background border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg font-black text-sm hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                >
+                  <Icon name="print" className="w-4 h-4" />
+                  Cetak / Simpan PDF
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

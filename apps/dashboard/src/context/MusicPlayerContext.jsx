@@ -14,6 +14,7 @@ const MusicPlayerContext = createContext(null);
 export const MusicPlayerProvider = ({ children }) => {
   const [activeMood, setActiveMood] = useState(MOODS[0]);
   const [isPlaying,  setIsPlaying]  = useState(false);
+  const [playbackMode, setPlaybackMode] = useState('youtube'); // 'youtube' | 'fallback'
   const [iframeKey,  setIframeKey]  = useState(0);
   const [isMiniPlayerVisible, setIsMiniPlayerVisible] = useState(false);
   const [customPlaylists, setCustomPlaylists] = useState(() => {
@@ -22,6 +23,7 @@ export const MusicPlayerProvider = ({ children }) => {
   });
 
   const play = (mood) => {
+    setPlaybackMode('youtube');
     if (mood && mood.youtubeId !== activeMood.youtubeId) {
       setActiveMood(mood);
       setIframeKey(k => k + 1);
@@ -44,6 +46,7 @@ export const MusicPlayerProvider = ({ children }) => {
       }
 
       if (videoId) {
+        setPlaybackMode('youtube');
         // Initial mood object
         const newMood = {
           title: 'Loading Title...',
@@ -99,7 +102,7 @@ export const MusicPlayerProvider = ({ children }) => {
       activeMood, isPlaying, iframeKey, moods: MOODS, 
       play, playCustom, stop, toggle, setIsPlaying,
       isMiniPlayerVisible, setIsMiniPlayerVisible,
-      customPlaylists
+      customPlaylists, playbackMode, setPlaybackMode
     }}>
       {children}
     </MusicPlayerContext.Provider>

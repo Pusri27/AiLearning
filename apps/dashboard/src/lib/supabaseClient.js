@@ -41,8 +41,27 @@ class MockQueryBuilder {
     return this;
   }
 
+  gte(col, val) {
+    this.filters.push(row => row[col] >= val);
+    return this;
+  }
+
   lt(col, val) {
     this.filters.push(row => row[col] < val);
+    return this;
+  }
+
+  lte(col, val) {
+    this.filters.push(row => row[col] <= val);
+    return this;
+  }
+
+  ilike(col, pattern) {
+    this.filters.push(row => {
+      const val = row[col];
+      const query = pattern.replace(/%/g, '').toLowerCase();
+      return val && String(val).toLowerCase().includes(query);
+    });
     return this;
   }
 
@@ -116,6 +135,22 @@ class MockQueryBuilder {
       const [col, valPattern] = cond.split('.ilike.');
       const query = valPattern.replace(/%/g, '').toLowerCase();
       return row[col] && String(row[col]).toLowerCase().includes(query);
+    }
+    if (cond.includes('.gte.')) {
+      const [col, val] = cond.split('.gte.');
+      return row[col] >= val;
+    }
+    if (cond.includes('.lte.')) {
+      const [col, val] = cond.split('.lte.');
+      return row[col] <= val;
+    }
+    if (cond.includes('.gt.')) {
+      const [col, val] = cond.split('.gt.');
+      return row[col] > val;
+    }
+    if (cond.includes('.lt.')) {
+      const [col, val] = cond.split('.lt.');
+      return row[col] < val;
     }
     return false;
   }

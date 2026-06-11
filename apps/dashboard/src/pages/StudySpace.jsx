@@ -463,7 +463,8 @@ const StudySpace = () => {
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const isGuest = profile.isGuest;
-  const { activeMood, isPlaying, moods, play, playCustom, setIsPlaying, customPlaylists } = useMusicPlayer();
+  const { activeMood, isPlaying, moods, play, playCustom, setIsPlaying, customPlaylists, playbackMode } = useMusicPlayer();
+  const [customUrl, setCustomUrl] = useState('');
 
   const handleMoodClick = (mood) => {
     play(mood);
@@ -543,7 +544,7 @@ const StudySpace = () => {
                 {/* Mood name on thumbnail */}
                 <div className="absolute bottom-3 left-3">
                   <span className="text-white text-xs font-black opacity-80 uppercase tracking-wider">
-                    {isPlaying ? '▶ Playing via YouTube' : 'Click to play'}
+                    {isPlaying ? (playbackMode === 'youtube' ? '▶ Playing via YouTube' : '▶ Playing Backup Stream') : 'Click to play'}
                   </span>
                 </div>
               </div>
@@ -557,19 +558,20 @@ const StudySpace = () => {
                   <input 
                     type="text" 
                     placeholder="Paste YouTube link here..."
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
                     className="flex-1 bg-white/50 border-2 border-on-surface/20 rounded-lg px-3 py-1.5 text-[11px] font-bold focus:bg-white focus:border-on-surface outline-none transition-all"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        playCustom(e.target.value);
-                        e.target.value = '';
+                        playCustom(customUrl);
+                        setCustomUrl('');
                       }
                     }}
                   />
                   <button 
-                    onClick={(e) => {
-                      const input = e.currentTarget.previousSibling;
-                      playCustom(input.value);
-                      input.value = '';
+                    onClick={() => {
+                      playCustom(customUrl);
+                      setCustomUrl('');
                     }}
                     className="px-3 bg-on-surface text-white rounded-lg border-2 border-on-surface text-[10px] font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all"
                   >

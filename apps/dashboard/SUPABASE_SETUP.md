@@ -335,7 +335,12 @@ create policy "Users can view own or global notifications"
 create policy "Anyone can insert notifications"
   on notifications for insert
   with check ( true );
+
+-- PENTING: Aktifkan Realtime untuk tabel notifications agar browser push notifikasi langsung terpicu
+alter publication supabase_realtime add table notifications;
 ```
+
+
 
 ## 12. Individual Notification Tracking
 

@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import ws from 'ws';
+
+globalThis.WebSocket = ws;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,8 +20,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   process.exit(1);
 }
 
-// Ensure we are hitting a real Supabase domain, not the placeholder
-if (supabaseUrl.includes('fqmuthkvmtckvnbkckcu')) {
+// Ensure we are hitting a real Supabase domain, not a generic placeholder
+if (supabaseUrl.includes('placeholder-url')) {
   console.log('Skipping ping: currently configured with the mock/placeholder URL.');
   process.exit(0);
 }

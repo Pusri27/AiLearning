@@ -33,13 +33,16 @@ export const awardAchievement = async (userId, achievementId) => {
       .single();
 
     // 4. Kirim notifikasi sistem (Tabel notifications)
-    await supabase.from('notifications').insert({
+    const { error: notifError } = await supabase.from('notifications').insert({
       user_id: userId,
       title: 'Lencana Baru Diraih!',
       content: `Selamat! Kamu mendapatkan lencana "${achievement?.title || achievementId}". Cek di halaman Achievements!`,
       type: 'achievement',
       link_to: '/achievements'
     });
+    if (notifError) {
+      console.error('🔔 [Notifications] Error inserting achievement notification:', notifError);
+    }
 
     showToast(`Selamat! Kamu mendapatkan lencana ${achievement?.title || achievementId}!`, 'success');
 

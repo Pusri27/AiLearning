@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useUserProfile } from '../context/UserProfileContext';
 import Icon from './Icon';
+import { showToast } from '../lib/toast';
 
 const NotificationDropdown = () => {
   const { profile } = useUserProfile();
@@ -49,17 +50,23 @@ const NotificationDropdown = () => {
   };
 
   useEffect(() => {
+    // Request native notification permission on mount
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
     if (profile?.role !== undefined) {
       fetchNotifications();
     }
 
-    // Realtime subscription
-    const channel = supabase
-      .channel('notif-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
-        fetchNotifications();
-      })
-      .subscribe();
+    // Dengarkan event kustom dari listener global untuk me-refresh list secara real-time
+    const handleNewNotif = () => {
+      console.log("🔔 [NotificationDropdown] New notification event received, reloading list...");
+      fetchNotifications();
+    };
+    window.addEventListener('harin-new-notification', handleNewNotif);
 
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
@@ -67,10 +74,10 @@ const NotificationDropdown = () => {
     document.addEventListener('mousedown', handleClickOutside);
     
     return () => {
-      supabase.removeChannel(channel);
+      window.removeEventListener('harin-new-notification', handleNewNotif);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [profile?.role]);
+  }, [profile?.role, profile?.id]);
 
   const markAsRead = async (notifId) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -132,6 +139,27 @@ const NotificationDropdown = () => {
             </button>
           </div>
 
+          {('Notification' in window) && Notification.permission !== 'granted' && (
+            <div className="p-3 bg-primary-container/20 border-b-2 border-on-surface text-center">
+              <button 
+                onClick={async () => {
+                  const perm = await Notification.requestPermission();
+                  if (perm === 'granted') {
+                    new Notification("Notifikasi Aktif!", {
+                      body: "Kamu akan menerima pemberitahuan langsung di desktop laptopmu.",
+                      icon: "/favicon.svg"
+                    });
+                  }
+                  // Force reload list to hide the button
+                  fetchNotifications();
+                }}
+                className="w-full bg-[#FFB800] text-on-background text-[10px] font-black uppercase py-2 px-3 rounded-lg border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer"
+              >
+                🔔 Aktifkan Notifikasi Desktop
+              </button>
+            </div>
+          )}
+
           <div className="overflow-y-auto flex-1">
             {notifications.length === 0 ? (
               <div className="p-10 text-center flex flex-col items-center gap-2 opacity-40">
@@ -162,9 +190,57 @@ const NotificationDropdown = () => {
             )}
           </div>
 
-          <div className="p-3 border-t-2 border-on-surface bg-surface-container-low text-center">
+          <div className="p-3 border-t-2 border-on-surface bg-surface-container-low text-center flex justify-between items-center px-4">
             <button className="py-1 text-[10px] font-black uppercase text-primary hover:underline">
               Lihat Semua Notifikasi
+            </button>
+            <button 
+              onClick={() => {
+                console.log("🧪 [Test Notif] Button clicked!");
+                console.log("🧪 [Test Notif] 'Notification' in window:", 'Notification' in window);
+                if ('Notification' in window) {
+                  console.log("🧪 [Test Notif] Current permission state:", Notification.permission);
+                  if (Notification.permission === 'granted') {
+                    console.log("🧪 [Test Notif] Creating Notification object...");
+                    try {
+                      const n = new Notification("Uji Coba Notifikasi 🧪", {
+                        body: "Ini adalah notifikasi uji coba instan dari Harin Learning!",
+                        icon: "/favicon.svg"
+                      });
+                      console.log("🧪 [Test Notif] Created successfully:", n);
+                      showToast("Uji Coba Notifikasi Terkirim! 🧪", "success");
+                      alert("Notifikasi uji coba dikirim! Jika tidak muncul di pojok layar, silakan periksa:\n1. Focus Mode / Jangan Ganggu (Do Not Disturb) di macOS Anda.\n2. Pengaturan Notifikasi Chrome di System Settings macOS Anda.");
+                    } catch (e) {
+                      console.error("🧪 [Test Notif] Error creating Notification:", e);
+                      alert("Gagal membuat objek Notifikasi: " + e.message);
+                    }
+                  } else {
+                    console.log("🧪 [Test Notif] Requesting permission...");
+                    Notification.requestPermission().then(perm => {
+                      console.log("🧪 [Test Notif] Permission request result:", perm);
+                      if (perm === 'granted') {
+                        try {
+                          new Notification("Uji Coba Notifikasi 🧪", {
+                            body: "Izin berhasil diberikan! Ini notifikasi uji cobamu.",
+                            icon: "/favicon.svg"
+                          });
+                          showToast("Izin Diberikan & Kuis Terkirim! 🧪", "success");
+                          alert("Izin berhasil diberikan dan notifikasi uji coba dikirim!");
+                        } catch (e) {
+                          alert("Izin diberikan, tapi gagal mengirim notifikasi: " + e.message);
+                        }
+                      } else {
+                        alert("Izin notifikasi ditolak oleh browser (Status: " + perm + ").\n\nUntuk mengaktifkannya:\n1. Klik ikon gembok di sebelah kiri URL bar browser Anda.\n2. Ubah opsi 'Notification' menjadi 'Allow'.");
+                      }
+                    });
+                  }
+                } else {
+                  alert("Browser ini tidak mendukung Notification API.");
+                }
+              }}
+              className="py-1 text-[10px] font-black uppercase text-secondary hover:underline cursor-pointer"
+            >
+              Test Notifikasi 🧪
             </button>
           </div>
         </div>

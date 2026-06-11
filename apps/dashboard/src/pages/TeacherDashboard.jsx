@@ -117,7 +117,7 @@ const TeacherDashboard = () => {
           const studentIds = [...new Set(enrollments.map(e => e.user_id))];
           const { data: profiles } = await supabase
             .from('profiles')
-            .select('id, full_name, email')
+            .select('id, full_name, username')
             .in('id', studentIds);
 
           // Attach profile and course info

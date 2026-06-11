@@ -227,12 +227,15 @@ const WritePost = () => {
         if (postError) throw postError;
 
         // Kirim Notifikasi Global
-        await supabase.from('notifications').insert({
+        const { error: notifError } = await supabase.from('notifications').insert({
           title: 'Artikel Baru: ' + title,
           content: `Cek artikel terbaru kami di kategori ${category}!`,
           type: 'blog',
           link_to: '/blog'
         });
+        if (notifError) {
+          console.error("🔔 [Notifications] Error inserting blog notification:", notifError);
+        }
 
         // Lencana Author
         await awardAchievement(user.id, 'author');
