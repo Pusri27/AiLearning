@@ -981,7 +981,22 @@ class MockSupabaseClient {
   }
 }
 
-const useMock = !supabaseUrl || supabaseUrl.includes('fqmuthkvmtckvnbkckcu') || localStorage.getItem('use_mock_supabase') === 'true';
+const isPlaceholder = (val) => !val || val === 'your_supabase_url' || val === 'your_supabase_anon_key' || val.includes('placeholder');
+
+const useMock = localStorage.getItem('use_mock_supabase') === 'true' || isPlaceholder(supabaseUrl) || isPlaceholder(supabaseAnonKey);
+
+if (useMock) {
+  console.warn('⚠️ MODE MOCK AKTIF: Menggunakan database lokal (localStorage).');
+  console.info('👉 Untuk menggunakan Supabase ASLI: Update file .env dengan URL dan Anon Key Anda, lalu RESTART server vite.');
+  if (isPlaceholder(supabaseUrl)) console.info('   (Penyebab: VITE_SUPABASE_URL masih menggunakan nilai default)');
+} else {
+  // Clear mock session to prevent conflicts when switching to real Supabase
+  if (localStorage.getItem('mock_supabase_session')) {
+    console.log('🔄 Membersihkan sesi mock sebelum beralih ke Supabase asli...');
+    localStorage.removeItem('mock_supabase_session');
+  }
+  console.log('✅ TERHUBUNG KE SUPABASE ASLI');
+}
 
 export const supabase = useMock 
   ? new MockSupabaseClient() 
