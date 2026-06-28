@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useUserProfile } from './UserProfileContext';
 
 const MOODS = [
   { title: 'Lo-fi Beats',    desc: 'Chill rhythmic loops to keep momentum going.',  iconName: 'music', accent: '#a78bfa', img: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400', youtubeId: 'jfKfPfyJRdk' },
@@ -17,10 +18,16 @@ export const MusicPlayerProvider = ({ children }) => {
   const [playbackMode, setPlaybackMode] = useState('youtube'); // 'youtube' | 'fallback'
   const [iframeKey,  setIframeKey]  = useState(0);
   const [isMiniPlayerVisible, setIsMiniPlayerVisible] = useState(false);
-  const [customPlaylists, setCustomPlaylists] = useState(() => {
-    const saved = localStorage.getItem('harin_custom_music');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const { profile } = useUserProfile();
+  const [customPlaylists, setCustomPlaylists] = useState([]);
+
+  useEffect(() => {
+    const key = profile && profile.id && !profile.isGuest 
+      ? `harin_custom_music_${profile.id}` 
+      : 'harin_custom_music_guest';
+    const saved = localStorage.getItem(key);
+    setCustomPlaylists(saved ? JSON.parse(saved) : []);
+  }, [profile?.id, profile?.isGuest]);
 
   const play = (mood) => {
     setPlaybackMode('youtube');
@@ -73,7 +80,10 @@ export const MusicPlayerProvider = ({ children }) => {
             setCustomPlaylists(prev => {
               const filtered = prev.filter(p => p.youtubeId !== videoId);
               const updated = [finalMood, ...filtered].slice(0, 5);
-              localStorage.setItem('harin_custom_music', JSON.stringify(updated));
+              const key = profile && profile.id && !profile.isGuest 
+                ? `harin_custom_music_${profile.id}` 
+                : 'harin_custom_music_guest';
+              localStorage.setItem(key, JSON.stringify(updated));
               return updated;
             });
           })
@@ -84,7 +94,10 @@ export const MusicPlayerProvider = ({ children }) => {
             setCustomPlaylists(prev => {
               const filtered = prev.filter(p => p.youtubeId !== videoId);
               const updated = [fallbackMood, ...filtered].slice(0, 5);
-              localStorage.setItem('harin_custom_music', JSON.stringify(updated));
+              const key = profile && profile.id && !profile.isGuest 
+                ? `harin_custom_music_${profile.id}` 
+                : 'harin_custom_music_guest';
+              localStorage.setItem(key, JSON.stringify(updated));
               return updated;
             });
           });

@@ -69,7 +69,10 @@ const PaymentMethodsManager = ({ showToast }) => {
 
   const handleAddManual = async (e) => {
     e.preventDefault();
-    if (!newMethod.accountNumber.trim()) return;
+    if (!newMethod.accountNumber.trim()) {
+      showToast('Nomor rekening/kartu/handphone tidak boleh kosong!', 'error');
+      return;
+    }
     
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;

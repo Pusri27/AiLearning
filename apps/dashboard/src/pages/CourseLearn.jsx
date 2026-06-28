@@ -8,6 +8,8 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { showToast } from '../lib/toast';
 import { useUserProfile } from '../context/UserProfileContext';
+import RichMaterialRenderer from '../components/RichMaterialRenderer';
+
 
 /* ─── Star Rating Component ─── */
 const StarRating = ({ value, onChange }) => (
@@ -385,7 +387,9 @@ const CourseLearn = () => {
                 )}
                 <div className="space-y-6">
                   <h1 className="text-4xl md:text-5xl font-black">{activeSyllabus.title}</h1>
-                  <div className="prose prose-lg max-w-none font-medium leading-relaxed text-on-surface-variant whitespace-pre-wrap">{activeSyllabus.content}</div>
+                  <div className="prose prose-lg max-w-none text-on-surface-variant">
+                    <RichMaterialRenderer content={activeSyllabus.content} />
+                  </div>
                 </div>
                 {activeSyllabus.file_url && (
                   <div className="bg-surface-variant/20 p-8 rounded-[32px] border-2 border-on-surface flex flex-col md:flex-row items-center justify-between gap-6">

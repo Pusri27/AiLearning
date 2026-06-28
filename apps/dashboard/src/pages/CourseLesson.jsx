@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { showToast } from '../lib/toast';
 import { useUserProfile } from '../context/UserProfileContext';
 import confetti from 'canvas-confetti';
+import RichMaterialRenderer from '../components/RichMaterialRenderer';
 
 const CourseLesson = () => {
   const { courseId, lessonId } = useParams();
@@ -488,7 +489,7 @@ const CourseLesson = () => {
               </div>
             </div>
           ) : (<div className="w-full h-48 bg-secondary-container border-4 border-on-background rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center overflow-hidden relative"><Icon name="menu_book" className="w-24 h-24 text-secondary/20 absolute -right-4 -bottom-4" /><div className="text-center relative z-10 p-6"><h4 className="font-headline-lg text-on-secondary-container">Bahan Bacaan</h4><p className="text-on-secondary-container/80 mt-2">Baca materi teks di bawah.</p></div></div>)}
-          {activeLesson.type !== 'assignment' && (<div className="bg-white border-2 border-on-background rounded-xl p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><h3 className="font-headline-md text-2xl mb-6">Materi: {activeLesson.title}</h3><div className="prose max-w-none text-on-surface-variant font-body-md space-y-4 text-lg"><p className="leading-relaxed whitespace-pre-wrap">{activeLesson.content || 'Tidak ada deskripsi.'}</p></div></div>)}
+          {activeLesson.type !== 'assignment' && (<div className="bg-white border-2 border-on-background rounded-xl p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><h3 className="font-headline-md text-2xl mb-6">Materi: {activeLesson.title}</h3><div className="prose max-w-none text-on-surface-variant font-body-md"><RichMaterialRenderer content={activeLesson.content} /></div></div>)}
           <div className="flex justify-between items-center py-6 border-t-2 border-on-background">
             <button onClick={handlePrevLesson} disabled={lessons.findIndex(l => l.id === activeLesson.id) === 0} className="px-6 py-3 font-label-bold text-on-surface border-2 border-on-background rounded-lg hover:bg-surface-container transition-all disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">Materi Sebelumnya</button>
             <div className="flex gap-4">

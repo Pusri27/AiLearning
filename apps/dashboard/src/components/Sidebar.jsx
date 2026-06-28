@@ -59,9 +59,18 @@ const Sidebar = () => {
   return (
     <aside className="w-64 bg-surface border-r-4 border-on-surface p-6 flex flex-col h-screen overflow-y-auto hidden md:flex shrink-0 z-50 shadow-[4px_0px_0px_0px_rgba(0,0,0,1)] sticky top-0">
       {/* Brand Logo */}
-      <div className="mb-10 px-2 cursor-pointer" onClick={() => navigate('/')}>
-        <h1 className="font-headline-md text-headline-md font-black text-primary mb-1 tracking-tighter">Harin Learning</h1>
-        <p className="font-label-bold text-label-bold text-secondary">{isGuest ? t('guestMode') : t('studentPortal')}</p>
+      <div className="mb-10 cursor-pointer group" onClick={() => navigate('/')}>
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 bg-primary text-on-primary rounded-xl border-2 border-on-surface flex items-center justify-center font-black text-xl shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] group-hover:rotate-6 transition-transform">
+            H
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-on-surface leading-none tracking-tight">Harin<span className="text-primary font-black">.</span></h1>
+            <p className="text-[9px] uppercase tracking-widest text-on-surface-variant font-black mt-0.5">
+              {isGuest ? 'GUEST MODE' : 'STUDENT PORTAL'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Main Navigation */}

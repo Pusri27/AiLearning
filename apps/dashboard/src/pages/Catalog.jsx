@@ -19,12 +19,13 @@ const Catalog = () => {
   const [sortBy,   setSortBy]   = useState('newest');
   const [ratingsMap, setRatingsMap] = useState({});
   const [enrolledCourseIds, setEnrolledCourseIds] = useState([]);
+  const [selectedLanguage, setSelectedLanguage] = useState('all');
 
   useEffect(() => {
     const fetchCourses = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      const { data, error } = await supabase.from('courses').select('*').eq('status', 'published').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
       if (!error && data) {
         setCourses(data);
         // Fetch ratings from course_ratings
@@ -74,8 +75,9 @@ const Catalog = () => {
 
   const filtered = useMemo(() => {
     let result = [...courses];
-    const currentLang = profile.language || 'id';
-    result = result.filter(c => (c.language || 'id') === currentLang);
+    if (selectedLanguage !== 'all') {
+      result = result.filter(c => (c.language || 'id') === selectedLanguage);
+    }
 
     if (category !== 'Semua') result = result.filter(c => c.category === category);
     if (search.trim()) {
@@ -88,7 +90,7 @@ const Catalog = () => {
     if (sortBy === 'price_desc') result.sort((a, b) => b.price - a.price);
     if (sortBy === 'az')       result.sort((a, b) => a.title.localeCompare(b.title));
     return result;
-  }, [courses, category, search, sortBy, profile.language]);
+  }, [courses, category, search, sortBy, selectedLanguage]);
 
   const formatPrice = (p) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(p);
@@ -160,10 +162,19 @@ const Catalog = () => {
                 <div className="flex items-center gap-1.5 border-2 border-on-surface bg-white px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg">
                   <Icon name="language" className="w-4 h-4 text-on-surface" />
                   <select
-                    value={profile.language || 'id'}
-                    onChange={e => updateProfile({ language: e.target.value })}
+                    value={selectedLanguage}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setSelectedLanguage(val);
+                      if (val !== 'all') {
+                        updateProfile({ language: val });
+                      }
+                    }}
                     className="border-none bg-transparent text-sm font-bold p-0 pr-6 focus:ring-0 cursor-pointer outline-none"
                   >
+                    <option value="all">
+                      {profile.language === 'en' ? 'All Languages' : profile.language === 'ja' ? 'すべての言語' : profile.language === 'zh' ? '所有语言' : 'Semua Bahasa'}
+                    </option>
                     <option value="id">Bahasa Indonesia</option>
                     <option value="en">English (US)</option>
                     <option value="ja">日本語</option>
@@ -238,6 +249,12 @@ const Catalog = () => {
                         {profile.language === 'en' ? 'Owned' : profile.language === 'ja' ? '所有済' : profile.language === 'zh' ? '已购买' : 'Dimiliki'}
                       </div>
                     )}
+                    {course.status === 'draft' && !enrolledCourseIds.includes(course.id) && (
+                      <div className="absolute top-4 right-4 bg-amber-500 text-white px-3 py-1 border-2 border-on-surface font-black uppercase text-[10px] flex items-center gap-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] z-10 rounded">
+                        <Icon name="edit_note" className="w-3.5 h-3.5" />
+                        Draft
+                      </div>
+                    )}
                   </div>
                   <div className="p-6 flex flex-col flex-grow">
                     <h3 className="font-headline-md mb-1 line-clamp-2">{course.title}</h3>
@@ -299,6 +316,7 @@ const Catalog = () => {
                     onClick={() => { 
                       setSearch(''); 
                       setCategory('Semua'); 
+                      setSelectedLanguage('id');
                       updateProfile({ language: 'id' }); 
                     }} 
                     className="px-6 py-2 bg-primary text-white border-2 border-on-surface rounded-lg font-label-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"

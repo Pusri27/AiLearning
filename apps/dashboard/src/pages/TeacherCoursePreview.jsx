@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import TeacherSidebar from '../components/TeacherSidebar';
 import { supabase } from '../lib/supabaseClient';
 import { showToast } from '../lib/toast';
+import RichMaterialRenderer from '../components/RichMaterialRenderer';
 
 const TeacherCoursePreview = () => {
   const { id: courseId } = useParams();
@@ -399,8 +400,8 @@ const TeacherCoursePreview = () => {
                 {(activeLesson.type === 'reading' || activeLesson.type === 'video') && (
                   <div className="bg-white border-2 border-on-background rounded-xl p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     <h3 className="text-2xl font-black mb-6">Materi: {activeLesson.title}</h3>
-                    <div className="prose max-w-none text-on-surface-variant space-y-4 text-lg">
-                      <p className="leading-relaxed whitespace-pre-wrap">{activeLesson.content || 'Tidak ada deskripsi untuk materi ini.'}</p>
+                    <div className="prose max-w-none text-on-surface-variant font-medium">
+                      <RichMaterialRenderer content={activeLesson.content} />
                     </div>
                   </div>
                 )}

@@ -8,6 +8,19 @@ import { showToast } from './toast';
  */
 export const awardAchievement = async (userId, achievementId) => {
   try {
+    // 0. Cek apakah user adalah guru (teacher). Guru tidak boleh mendapatkan achievement.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profile?.role === 'teacher') {
+      // Hapus jika ada di database (sebagai cleanup)
+      await supabase.from('user_achievements').delete().eq('user_id', userId);
+      return;
+    }
+
     // 1. Cek apakah user sudah punya lencana ini
     const { data: existing } = await supabase
       .from('user_achievements')
@@ -56,6 +69,19 @@ export const awardAchievement = async (userId, achievementId) => {
  */
 export const checkAchievements = async (userId) => {
   if (!userId) return;
+
+  // 0. Cek apakah user adalah guru (teacher). Guru tidak boleh mendapatkan achievement.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profile?.role === 'teacher') {
+    // Hapus jika ada di database (sebagai cleanup)
+    await supabase.from('user_achievements').delete().eq('user_id', userId);
+    return;
+  }
 
   // 1. Cek Pioneer (Selalu berikan jika belum ada)
   await awardAchievement(userId, 'pioneer');

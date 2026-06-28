@@ -28,6 +28,11 @@ const Achievements = () => {
   const [selectedCertForPreview, setSelectedCertForPreview] = useState(null);
 
   useEffect(() => {
+    if (profile && profile.role === 'teacher') {
+      navigate('/teacher/dashboard');
+      return;
+    }
+
     const fetchData = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();

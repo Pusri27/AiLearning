@@ -347,6 +347,75 @@ const CourseDetail = () => {
     </div>
   );
 
+  // Parse what_will_learn safely
+  let whatWillLearnList = [];
+  if (course?.what_will_learn) {
+    try {
+      if (Array.isArray(course.what_will_learn)) {
+        whatWillLearnList = course.what_will_learn;
+      } else {
+        whatWillLearnList = JSON.parse(course.what_will_learn);
+      }
+      whatWillLearnList = whatWillLearnList.filter(item => item && item.trim());
+    } catch (e) {
+      console.error("Failed to parse what_will_learn", e);
+    }
+  }
+
+  // Formatting helpers for description
+  const parseInlineStyles = (text) => {
+    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index} className="font-black text-on-surface">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={index} className="italic">{part.slice(1, -1)}</em>;
+      }
+      return part;
+    });
+  };
+
+  const renderFormattedDescription = (desc) => {
+    if (!desc) return <p className="italic text-on-surface-variant/70">Tidak ada deskripsi tersedia.</p>;
+    const lines = desc.split('\n');
+    return (
+      <div className="space-y-2">
+        {lines.map((line, idx) => {
+          let trimmed = line.trim();
+          if (!trimmed) return <div key={idx} className="h-2" />;
+          if (trimmed.startsWith('###')) {
+            return <h4 key={idx} className="text-md font-black text-on-surface mt-4 mb-2">{trimmed.replace('###', '').trim()}</h4>;
+          }
+          if (trimmed.startsWith('##')) {
+            return <h3 key={idx} className="text-lg font-black text-on-surface mt-4 mb-2">{trimmed.replace('##', '').trim()}</h3>;
+          }
+          if (trimmed.startsWith('•') || trimmed.startsWith('*') || trimmed.startsWith('-')) {
+            const cleanText = trimmed.replace(/^[•*\-]\s*/, '');
+            return (
+              <div key={idx} className="flex gap-2 items-start pl-2">
+                <span className="text-primary font-black mt-0.5">•</span>
+                <span className="flex-1">{parseInlineStyles(cleanText)}</span>
+              </div>
+            );
+          }
+          const numMatch = trimmed.match(/^(\d+)[.)]\s*(.*)/);
+          if (numMatch) {
+            const num = numMatch[1];
+            const cleanText = numMatch[2];
+            return (
+              <div key={idx} className="flex gap-2 items-start pl-2">
+                <span className="text-primary font-black min-w-[16px] text-right">{num}.</span>
+                <span className="flex-1">{parseInlineStyles(cleanText)}</span>
+              </div>
+            );
+          }
+          return <p key={idx} className="leading-relaxed">{parseInlineStyles(trimmed)}</p>;
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="bg-background text-on-background font-body-md flex h-screen overflow-hidden relative">
       <Sidebar />
@@ -558,26 +627,39 @@ const CourseDetail = () => {
               <section className="bg-surface rounded-xl border-2 border-on-background p-6 md:p-8 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)]">
                 <h2 className="font-headline-lg text-headline-lg mb-4 pb-4 border-b-2 border-on-background">Tentang Kursus Ini</h2>
                 <div className="space-y-4 text-body-md font-body-md text-on-surface-variant">
-                  <p>{course.description || 'Tidak ada deskripsi tersedia.'}</p>
+                  {renderFormattedDescription(course.description)}
                 </div>
               </section>
 
               <section className="bg-secondary-fixed rounded-xl border-2 border-on-background p-6 md:p-8 shadow-[4px_4px_0px_0px_rgba(26,28,28,1)]">
                 <h2 className="font-headline-lg text-headline-lg mb-6 text-on-secondary-fixed">Apa yang Akan Kamu Pelajari</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {syllabus.filter(s => s.type !== 'assignment').length > 0 ? 
-                    syllabus.filter(s => s.type !== 'assignment').slice(0, 4).map((s) => (
-                    <div key={s.id} className="bg-surface border-2 border-on-background p-4 rounded-lg flex gap-4 items-start shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
-                      <div className="p-2 bg-secondary-container rounded-md border-2 border-on-surface flex items-center justify-center">
-                        <Icon name="account_tree" className="w-6 h-6 text-secondary" />
+                  {whatWillLearnList.length > 0 ? (
+                    whatWillLearnList.map((item, index) => (
+                      <div key={index} className="bg-surface border-2 border-on-background p-4 rounded-lg flex gap-3 items-start shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
+                        <div className="p-1.5 bg-emerald-100 rounded-full border border-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5 animate-bounce-once">
+                          <Icon name="check" className="w-4 h-4 text-emerald-600 font-black" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-label-bold text-on-surface leading-tight">{item}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 overflow-hidden">
-                        <h3 className="font-label-bold text-label-bold mb-1 truncate">{s.title}</h3>
-                        <p className="text-[10px] text-on-surface-variant line-clamp-2">{getBriefDesc(s.content)}</p>
+                    ))
+                  ) : (
+                    syllabus.filter(s => s.type !== 'assignment').length > 0 ? 
+                      syllabus.filter(s => s.type !== 'assignment').slice(0, 4).map((s) => (
+                      <div key={s.id} className="bg-surface border-2 border-on-background p-4 rounded-lg flex gap-4 items-start shadow-[2px_2px_0px_0px_rgba(26,28,28,1)]">
+                        <div className="p-2 bg-secondary-container rounded-md border-2 border-on-surface flex items-center justify-center">
+                          <Icon name="account_tree" className="w-6 h-6 text-secondary" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <h3 className="font-label-bold text-label-bold mb-1 truncate">{s.title}</h3>
+                          <p className="text-[10px] text-on-surface-variant line-clamp-2">{getBriefDesc(s.content)}</p>
+                        </div>
                       </div>
-                    </div>
-                  )) : (
-                    <p className="text-sm text-on-secondary-fixed italic">Belum ada materi silabus yang diunggah.</p>
+                    )) : (
+                      <p className="text-sm text-on-secondary-fixed italic">Belum ada materi silabus yang diunggah.</p>
+                    )
                   )}
                 </div>
               </section>

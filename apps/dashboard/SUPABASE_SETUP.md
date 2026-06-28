@@ -44,6 +44,7 @@ create table courses (
   category text,
   description text,
   status text default 'draft',
+  what_will_learn jsonb,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 

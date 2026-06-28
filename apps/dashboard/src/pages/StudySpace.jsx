@@ -149,31 +149,33 @@ function PomodoroTimer() {
 
       {/* Custom Input */}
       {showCustom && (
-        <div className="flex gap-2 p-3 bg-black/10 rounded-lg border border-on-surface/20 animate-pulse-once">
-          <div className="flex-1 flex flex-col gap-1">
-            <label className={`text-[10px] font-black uppercase ${textColor} opacity-70`}>Fokus (menit)</label>
-            <input
-              type="number" min="1" max="180"
-              value={customF}
-              onChange={e => setCustomF(e.target.value)}
-              className="h-9 w-full border-2 border-on-surface rounded-lg px-2 text-center font-black bg-white/80 focus:outline-none"
-            />
+        <div className="flex flex-col gap-3 p-3 bg-black/10 rounded-lg border border-on-surface/20 animate-pulse-once">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className={`text-[10px] font-black uppercase ${textColor} opacity-70`}>Fokus (menit)</label>
+              <input
+                type="number" min="1" max="180"
+                value={customF}
+                onChange={e => setCustomF(e.target.value)}
+                className="h-9 w-full border-2 border-on-surface rounded-lg px-2 text-center font-black bg-white/80 focus:outline-none"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className={`text-[10px] font-black uppercase ${textColor} opacity-70`}>Istirahat (menit)</label>
+              <input
+                type="number" min="1" max="60"
+                value={customB}
+                onChange={e => setCustomB(e.target.value)}
+                className="h-9 w-full border-2 border-on-surface rounded-lg px-2 text-center font-black bg-white/80 focus:outline-none"
+              />
+            </div>
           </div>
-          <div className="flex-1 flex flex-col gap-1">
-            <label className={`text-[10px] font-black uppercase ${textColor} opacity-70`}>Istirahat (menit)</label>
-            <input
-              type="number" min="1" max="60"
-              value={customB}
-              onChange={e => setCustomB(e.target.value)}
-              className="h-9 w-full border-2 border-on-surface rounded-lg px-2 text-center font-black bg-white/80 focus:outline-none"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={applyCustom}
-              className="h-9 px-3 bg-on-surface text-white rounded-lg border-2 border-on-surface font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] hover:translate-y-[-1px] transition-all"
-            >OK</button>
-          </div>
+          <button
+            onClick={applyCustom}
+            className="w-full h-9 bg-on-surface text-white rounded-lg border-2 border-on-surface font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] hover:translate-y-[-1px] transition-all"
+          >
+            OK
+          </button>
         </div>
       )}
 

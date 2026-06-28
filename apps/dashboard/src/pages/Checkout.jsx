@@ -27,6 +27,8 @@ const Checkout = () => {
   const [formData, setFormData] = useState({
     accountNumber: '',
     provider: 'BCA', // Default for bank
+    expiry: '',
+    cvv: '',
   });
 
   useEffect(() => {
@@ -100,6 +102,32 @@ const Checkout = () => {
 
   const handlePayment = async () => {
     if (!user || cartItems.length === 0) return;
+
+    if (!selectedSaved) {
+      if (!formData.accountNumber || !formData.accountNumber.trim()) {
+        let errorMsg = 'Harap lengkapi nomor pembayaran Anda!';
+        if (paymentMethod === 'bank') {
+          errorMsg = 'Harap masukkan nomor rekening / Virtual Account!';
+        } else if (paymentMethod === 'card') {
+          errorMsg = 'Harap masukkan nomor kartu kredit!';
+        } else if (paymentMethod === 'wallet') {
+          errorMsg = 'Harap masukkan nomor handphone!';
+        }
+        showToast(errorMsg, 'error');
+        return;
+      }
+      if (paymentMethod === 'card') {
+        if (!formData.expiry || !formData.expiry.trim()) {
+          showToast('Harap masukkan masa berlaku kartu!', 'error');
+          return;
+        }
+        if (!formData.cvv || !formData.cvv.trim()) {
+          showToast('Harap masukkan kode CVV kartu!', 'error');
+          return;
+        }
+      }
+    }
+
     setProcessing(true);
 
     try {
@@ -425,11 +453,23 @@ const Checkout = () => {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <label className="block text-xs font-black uppercase mb-1">Masa Berlaku</label>
-                              <input type="text" placeholder="MM/YY" className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" />
+                              <input 
+                                type="text" 
+                                placeholder="MM/YY" 
+                                value={formData.expiry}
+                                onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
+                                className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
+                              />
                             </div>
                             <div>
                               <label className="block text-xs font-black uppercase mb-1">CVV</label>
-                              <input type="text" placeholder="123" className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" />
+                              <input 
+                                type="text" 
+                                placeholder="123" 
+                                value={formData.cvv}
+                                onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
+                                className="w-full bg-white border-2 border-on-surface p-3 rounded-lg focus:outline-none focus:border-primary" 
+                              />
                             </div>
                           </div>
                         </div>

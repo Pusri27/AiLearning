@@ -94,9 +94,13 @@ const PersistentMusicPlayer = () => {
       // If player already exists, just load new video
       if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
         try {
-          playerRef.current.loadVideoById(activeMood.youtubeId);
-          playerRef.current.unMute(); // Ensure it's not muted
-          playerRef.current.playVideo(); // Force autoplay
+          if (isPlayingRef.current) {
+            playerRef.current.loadVideoById(activeMood.youtubeId);
+            playerRef.current.unMute(); // Ensure it's not muted
+            playerRef.current.playVideo();
+          } else if (typeof playerRef.current.cueVideoById === 'function') {
+            playerRef.current.cueVideoById(activeMood.youtubeId);
+          }
         } catch (e) {
           console.error("Error updating video:", e);
         }
@@ -193,14 +197,18 @@ const PersistentMusicPlayer = () => {
           audioRef.current.src = url;
           audioRef.current.load();
         }
-        audioRef.current.play().catch(e => console.error("HTML5 Audio play error:", e));
+        if (isPlaying) {
+          audioRef.current.play().catch(e => console.error("HTML5 Audio play error:", e));
+        } else {
+          audioRef.current.pause();
+        }
       }
       // Ensure YouTube is paused
       if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
         try { playerRef.current.pauseVideo(); } catch (e) {}
       }
     }
-  }, [activeMood.youtubeId, playbackMode]);
+  }, [activeMood.youtubeId, playbackMode, isPlaying]);
 
   if (isTeacherRoute) return null;
 

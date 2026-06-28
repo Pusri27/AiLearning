@@ -34,8 +34,12 @@ const TeacherCreateCourse = () => {
     description: '',
     level: 'beginner',
     language: 'id',
-    image_url: ''
+    image_url: '',
+    what_will_learn: ['']
   });
+
+  const [showDescModal, setShowDescModal] = useState(false);
+  const [tempDescription, setTempDescription] = useState('');
 
   // Syllabus State
   const [sections, setSections] = useState([]);
@@ -114,7 +118,10 @@ const TeacherCreateCourse = () => {
             description: courseData.description,
             level: courseData.level || 'beginner',
             language: courseData.language || 'id',
-            image_url: courseData.image_url
+            image_url: courseData.image_url,
+            what_will_learn: Array.isArray(courseData.what_will_learn) 
+              ? courseData.what_will_learn 
+              : (courseData.what_will_learn ? JSON.parse(courseData.what_will_learn) : [''])
           });
           setCourseId(editId);
           setCourseStatus(courseData.status || 'draft');
@@ -143,6 +150,18 @@ const TeacherCreateCourse = () => {
     };
     checkUser();
   }, [navigate, editId]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      const updatedDesc = localStorage.getItem('temp_course_description');
+      if (updatedDesc !== null && updatedDesc !== formData.description) {
+        setFormData(prev => ({ ...prev, description: updatedDesc }));
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [formData.description]);
+
 
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return;
@@ -287,7 +306,8 @@ const TeacherCreateCourse = () => {
         level: formData.level,
         language: formData.language,
         image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop',
-        status: courseId ? undefined : 'draft' // New courses always start as draft
+        status: courseId ? undefined : 'draft', // New courses always start as draft
+        what_will_learn: formData.what_will_learn
       };
       if (!courseId) delete payload.status; // Remove when updating
 
@@ -336,6 +356,147 @@ const TeacherCreateCourse = () => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleAddWhatWillLearn = () => {
+    setFormData(prev => ({
+      ...prev,
+      what_will_learn: [...prev.what_will_learn, '']
+    }));
+  };
+
+  const handleWhatWillLearnChange = (index, value) => {
+    const updated = [...formData.what_will_learn];
+    updated[index] = value;
+    setFormData(prev => ({
+      ...prev,
+      what_will_learn: updated
+    }));
+  };
+
+  const handleRemoveWhatWillLearn = (index) => {
+    const updated = formData.what_will_learn.filter((_, i) => i !== index);
+    setFormData(prev => ({
+      ...prev,
+      what_will_learn: updated.length > 0 ? updated : ['']
+    }));
+  };
+
+  const handleOpenDescModal = () => {
+    localStorage.setItem('temp_course_description', formData.description || '');
+    window.open('/teacher/courses/description-editor', '_blank');
+  };
+
+  const insertTextAtCursor = (textareaId, textToInsert) => {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const before = text.substring(0, start);
+    const after = text.substring(end, text.length);
+
+    const newValue = before + textToInsert + after;
+    
+    setFormData(prev => ({ ...prev, description: newValue }));
+
+    // Set focus and restore cursor position
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+    }, 50);
+  };
+  const convertHtmlToMarkdown = (htmlString) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    
+    const walk = (node) => {
+      let result = '';
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tagName = node.tagName.toLowerCase();
+        
+        let childrenText = '';
+        for (let i = 0; i < node.childNodes.length; i++) {
+          childrenText += walk(node.childNodes[i]);
+        }
+        
+        switch (tagName) {
+          case 'strong':
+          case 'b':
+            return `**${childrenText}**`;
+          case 'em':
+          case 'i':
+            return `*${childrenText}*`;
+          case 'h1':
+          case 'h2':
+          case 'h3':
+          case 'h4':
+          case 'h5':
+          case 'h6':
+            return `\n### ${childrenText.trim()}\n`;
+          case 'li': {
+            const parentTag = node.parentNode ? node.parentNode.tagName.toLowerCase() : 'ul';
+            const cleanContent = childrenText.trim();
+            if (parentTag === 'ol') {
+              const siblings = Array.from(node.parentNode.children);
+              const index = siblings.indexOf(node) + 1;
+              return `\n${index}. ${cleanContent}\n`;
+            } else {
+              return `\n• ${cleanContent}\n`;
+            }
+          }
+          case 'ul':
+          case 'ol':
+            return `\n${childrenText.trim()}\n`;
+          case 'p':
+          case 'div':
+            return `\n${childrenText.trim()}\n`;
+          case 'br':
+            return '\n';
+          default:
+            return childrenText;
+        }
+      }
+      return result;
+    };
+    
+    let markdown = walk(doc.body);
+    // Safety cleanups for newlines and spaces
+    markdown = markdown
+      .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
+      .replace(/([•*]|\d+\.)\s*\n+/g, '$1 ') // Ensure no newlines directly after bullet/number
+      .trim();
+    return markdown;
+  };
+
+  const handlePasteDescription = (e) => {
+    const html = e.clipboardData.getData('text/html');
+    if (html) {
+      e.preventDefault();
+      const markdown = convertHtmlToMarkdown(html);
+      if (markdown) {
+        const textarea = e.target;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        const before = text.substring(0, start);
+        const after = text.substring(end, text.length);
+
+        const newValue = before + markdown + after;
+        setFormData(prev => ({ ...prev, description: newValue }));
+
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + markdown.length, start + markdown.length);
+        }, 50);
+      }
+    }
+  };
+
+
+
   const handlePublish = async (e) => {
     if (e) e.preventDefault();
     if (!courseId) { showToast('Simpan kursus terlebih dahulu.', 'error'); return; }
@@ -371,7 +532,8 @@ const TeacherCreateCourse = () => {
           level: formData.level,
           language: formData.language,
           image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop',
-          status: 'draft'
+          status: 'draft',
+          what_will_learn: formData.what_will_learn
         };
 
         if (courseId) {
@@ -442,15 +604,18 @@ const TeacherCreateCourse = () => {
   const [syllabusModalOpen, setSyllabusModalOpen] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [aiDraft, setAiDraft] = useState('');
+  const [activeCodingTab, setActiveCodingTab] = useState('initial');
 
   const openSyllabusModal = (sectionId, type = 'material', syllabus = null) => {
     setAiDraft('');
+    setActiveCodingTab('initial');
     if (syllabus) {
       setEditingSyllabus({
         ...syllabus,
         type: syllabus.type || 'material',
         allowed_file_types: syllabus.allowed_file_types || 'pdf, docx, pptx',
         initial_code: syllabus.initial_code || '',
+        solution_code: syllabus.solution_code || '',
         test_cases: syllabus.test_cases || [{ input: '', expected: '' }]
       });
     } else {
@@ -465,6 +630,7 @@ const TeacherCreateCourse = () => {
         type: type,
         allowed_file_types: 'pdf, docx, pptx, zip',
         initial_code: 'function solution(data) {\n  // Tulis kode Anda di sini\n  return data;\n}',
+        solution_code: 'function solution(data) {\n  // Tulis kode solusi lengkap yang benar di sini\n  return data;\n}',
         test_cases: [{ input: '', expected: '' }]
       });
     }
@@ -686,7 +852,7 @@ const TeacherCreateCourse = () => {
 
       let error;
       if (editingSyllabus.id) {
-        ({ error } = await supabase.from('course_syllabus').update(payload).eq(editingSyllabus.id));
+        ({ error } = await supabase.from('course_syllabus').update(payload).eq('id', editingSyllabus.id));
       } else {
         ({ error } = await supabase.from('course_syllabus').insert([payload]));
       }
@@ -873,14 +1039,106 @@ const TeacherCreateCourse = () => {
                   </div>
 
                   <div>
-                    <label className="block mb-3 font-black text-sm text-on-surface-variant uppercase tracking-widest" htmlFor="course-description">Deskripsi Kursus</label>
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="block font-black text-sm text-on-surface-variant uppercase tracking-widest" htmlFor="course-description">Deskripsi Kursus</label>
+                      <button
+                        type="button"
+                        onClick={handleOpenDescModal}
+                        className="text-xs font-black text-primary hover:underline flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-on-surface bg-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+                      >
+                        <span className="material-symbols-outlined text-xs font-black">open_in_full</span> Perbesar Layar Tulis ↗
+                      </button>
+                    </div>
+                    {/* Inline Toolbar */}
+                    <div className="flex flex-wrap gap-2 mb-3 p-2 bg-surface-variant/10 border-2 border-on-surface rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('course-description', '**Teks Tebal**')}
+                        className="px-2.5 py-1 text-xs font-black border-2 border-on-surface rounded-lg bg-white hover:bg-surface-variant/30 shadow-[1px_1px_0px_0px_#000] active:translate-y-0.5 active:shadow-none"
+                        title="Tebal"
+                      >
+                        B
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('course-description', '*Teks Miring*')}
+                        className="px-2.5 py-1 text-xs font-black border-2 border-on-surface rounded-lg bg-white hover:bg-surface-variant/30 shadow-[1px_1px_0px_0px_#000] active:translate-y-0.5 active:shadow-none italic"
+                        title="Miring"
+                      >
+                        I
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('course-description', '\n• ')}
+                        className="px-2.5 py-1 text-xs font-black border-2 border-on-surface rounded-lg bg-white hover:bg-surface-variant/30 shadow-[1px_1px_0px_0px_#000] active:translate-y-0.5 active:shadow-none"
+                        title="Poin Bulat"
+                      >
+                        • Poin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('course-description', '\n1. ')}
+                        className="px-2.5 py-1 text-xs font-black border-2 border-on-surface rounded-lg bg-white hover:bg-surface-variant/30 shadow-[1px_1px_0px_0px_#000] active:translate-y-0.5 active:shadow-none"
+                        title="Poin Angka"
+                      >
+                        1. Poin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('course-description', '\n### Subjudul ')}
+                        className="px-2.5 py-1 text-xs font-black border-2 border-on-surface rounded-lg bg-white hover:bg-surface-variant/30 shadow-[1px_1px_0px_0px_#000] active:translate-y-0.5 active:shadow-none"
+                        title="Subjudul"
+                      >
+                        H3
+                      </button>
+                    </div>
                     <textarea 
                       className="w-full rounded-2xl border-4 border-on-surface bg-surface px-6 py-4 font-black text-on-surface placeholder:text-outline-variant focus:bg-primary-container/10 outline-none transition-all h-40 resize-none" 
                       id="course-description" 
-                      placeholder="Apa yang akan dipelajari siswa?"
+                      placeholder="Tulis deskripsi kursus di sini. Gunakan tombol pemformatan di atas untuk menambahkan poin bulat atau angka."
                       value={formData.description}
                       onChange={handleInputChange}
+                      onPaste={handlePasteDescription}
                     ></textarea>
+                  </div>
+
+                  {/* Apa yang Akan Kamu Pelajari */}
+                  <div>
+                    <label className="block mb-2 font-black text-sm text-on-surface-variant uppercase tracking-widest">Apa yang Akan Kamu Pelajari</label>
+                    <p className="text-xs font-bold text-on-surface-variant mb-4 leading-relaxed">
+                      Sebutkan kompetensi atau hasil belajar yang akan didapatkan siswa setelah menyelesaikan kursus ini.
+                    </p>
+                    <div className="space-y-3">
+                      {formData.what_will_learn && formData.what_will_learn.map((item, idx) => (
+                        <div key={idx} className="flex gap-3 items-center">
+                          <span className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-on-surface flex items-center justify-center font-black text-emerald-700 text-xs flex-shrink-0 shadow-[1px_1px_0px_0px_#000]">
+                            ✓
+                          </span>
+                          <input
+                            type="text"
+                            value={item}
+                            placeholder="Contoh: Menguasai dasar-dasar UI/UX"
+                            onChange={(e) => handleWhatWillLearnChange(idx, e.target.value)}
+                            className="flex-1 rounded-xl border-2 border-on-surface bg-surface px-4 py-2.5 font-bold text-on-surface focus:bg-primary-container/5 outline-none transition-all text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveWhatWillLearn(idx)}
+                            className="w-9 h-9 rounded-xl border-2 border-on-surface flex items-center justify-center hover:bg-error/10 hover:text-error transition-all shadow-[2px_2px_0px_0px_#000] active:translate-y-0.5 active:shadow-none flex-shrink-0"
+                            title="Hapus Poin"
+                          >
+                            <span className="material-symbols-outlined text-sm font-black">delete</span>
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={handleAddWhatWillLearn}
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 border-2 border-on-surface font-black text-xs rounded-xl bg-surface hover:bg-surface-variant shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer font-sans"
+                      >
+                        <span className="material-symbols-outlined text-xs font-black">add</span> Tambah Poin Kompetensi
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1425,14 +1683,151 @@ const TeacherCreateCourse = () => {
                       </>
                     ) : editingSyllabus.type === 'coding' ? (
                       <div className="space-y-6 flex flex-col h-full">
-                        <div className="flex-1">
-                          <label className="block mb-2 font-black text-xs uppercase tracking-widest text-on-surface-variant">Initial Code (JS)</label>
-                          <textarea 
-                            className="w-full rounded-2xl border-4 border-on-surface bg-[#181818] text-green-400 font-mono text-xs p-6 outline-none h-full min-h-[300px] resize-none" 
-                            placeholder="function solution(data) { ... }" 
-                            value={editingSyllabus.initial_code}
-                            onChange={e => setEditingSyllabus({...editingSyllabus, initial_code: e.target.value})}
-                          />
+                        {/* Tab Headers */}
+                        <div className="flex border-4 border-on-surface rounded-2xl overflow-hidden bg-surface-variant/20 p-1.5 gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodingTab('initial')}
+                            className={`flex-1 py-3 text-xs font-black rounded-xl transition-all border-2 ${
+                              activeCodingTab === 'initial'
+                                ? 'bg-primary text-on-primary border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                : 'border-transparent text-on-surface-variant hover:bg-surface-variant/30'
+                            }`}
+                          >
+                            1. Potongan Kode Awal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodingTab('solution')}
+                            className={`flex-1 py-3 text-xs font-black rounded-xl transition-all border-2 ${
+                              activeCodingTab === 'solution'
+                                ? 'bg-secondary text-on-secondary border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                : 'border-transparent text-on-surface-variant hover:bg-surface-variant/30'
+                            }`}
+                          >
+                            2. Kunci Jawaban (Solusi)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCodingTab('tests')}
+                            className={`flex-1 py-3 text-xs font-black rounded-xl transition-all border-2 ${
+                              activeCodingTab === 'tests'
+                                ? 'bg-tertiary text-on-tertiary border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                : 'border-transparent text-on-surface-variant hover:bg-surface-variant/30'
+                            }`}
+                          >
+                            3. Kasus Uji ({editingSyllabus.test_cases?.length || 0})
+                          </button>
+                        </div>
+
+                        {/* Tab Content */}
+                        <div className="flex-grow flex flex-col min-h-[350px]">
+                          {activeCodingTab === 'initial' && (
+                            <div className="flex-1 flex flex-col gap-3">
+                              <div>
+                                <p className="text-xs font-black text-on-surface">Potongan Kode Awal (Untuk Dilengkapi Siswa)</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant mt-0.5">Siswa akan melihat kode ini sebagai kerangka awal di editor. Gunakan untuk memberi komentar instruksi atau struktur fungsi dasar.</p>
+                              </div>
+                              <textarea 
+                                className="flex-1 w-full rounded-2xl border-4 border-on-surface bg-[#181818] text-green-400 font-mono text-xs p-6 outline-none min-h-[250px] resize-none" 
+                                placeholder="function solution(data) {&#10;  // Lengkapi kode ini&#10;  return data;&#10;}" 
+                                value={editingSyllabus.initial_code || ''}
+                                onChange={e => setEditingSyllabus({...editingSyllabus, initial_code: e.target.value})}
+                              />
+                            </div>
+                          )}
+
+                          {activeCodingTab === 'solution' && (
+                            <div className="flex-1 flex flex-col gap-3">
+                              <div>
+                                <p className="text-xs font-black text-on-surface">Kunci Jawaban / Hasil Akhir yang Benar</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant mt-0.5">Kode lengkap dan benar sebagai referensi guru/sistem untuk memverifikasi kebenaran jawaban siswa.</p>
+                              </div>
+                              <textarea 
+                                className="flex-1 w-full rounded-2xl border-4 border-on-surface bg-[#181818] text-cyan-400 font-mono text-xs p-6 outline-none min-h-[250px] resize-none" 
+                                placeholder="function solution(data) {&#10;  // Jawaban lengkap yang benar&#10;  return data * 2;&#10;}" 
+                                value={editingSyllabus.solution_code || ''}
+                                onChange={e => setEditingSyllabus({...editingSyllabus, solution_code: e.target.value})}
+                              />
+                            </div>
+                          )}
+
+                          {activeCodingTab === 'tests' && (
+                            <div className="flex-1 flex flex-col gap-4 overflow-y-auto max-h-[380px] pr-2">
+                              <div className="flex justify-between items-center bg-surface-variant/10 p-4 border-2 border-on-surface/10 rounded-xl">
+                                <div>
+                                  <p className="text-xs font-black text-on-surface">Kasus Pengujian (Test Cases)</p>
+                                  <p className="text-[10px] font-bold text-on-surface-variant mt-0.5">Definisikan nilai input dan hasil yang diharapkan (dalam format JSON).</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentTests = editingSyllabus.test_cases || [];
+                                    setEditingSyllabus({
+                                      ...editingSyllabus,
+                                      test_cases: [...currentTests, { input: '', expected: '' }]
+                                    });
+                                  }}
+                                  className="px-3 py-1.5 bg-tertiary text-on-tertiary text-xs font-black rounded-lg border-2 border-on-surface hover:translate-y-0.5 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                >
+                                  + Tambah Uji
+                                </button>
+                              </div>
+
+                              <div className="space-y-4">
+                                {(editingSyllabus.test_cases || []).map((tc, idx) => (
+                                  <div key={idx} className="p-4 border-2 border-on-surface rounded-xl bg-white space-y-3 relative shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-[10px] font-black uppercase text-on-surface bg-yellow-300 px-2.5 py-0.5 rounded border border-on-surface">Test #{idx + 1}</span>
+                                      {(editingSyllabus.test_cases || []).length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const updatedTests = [...editingSyllabus.test_cases];
+                                            updatedTests.splice(idx, 1);
+                                            setEditingSyllabus({ ...editingSyllabus, test_cases: updatedTests });
+                                          }}
+                                          className="text-error font-black text-xs hover:underline flex items-center gap-1"
+                                        >
+                                          <Icon name="delete" className="w-3.5 h-3.5" /> Hapus
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-wider text-on-surface-variant mb-1">Input (JSON)</label>
+                                        <input
+                                          type="text"
+                                          className="w-full rounded-lg border-2 border-on-surface bg-surface px-3 py-2 font-mono text-[11px] text-on-surface outline-none"
+                                          placeholder='Contoh: [1, 2] atau "hello"'
+                                          value={tc.input}
+                                          onChange={e => {
+                                            const updatedTests = [...editingSyllabus.test_cases];
+                                            updatedTests[idx].input = e.target.value;
+                                            setEditingSyllabus({ ...editingSyllabus, test_cases: updatedTests });
+                                          }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-wider text-on-surface-variant mb-1">Expected Output (JSON)</label>
+                                        <input
+                                          type="text"
+                                          className="w-full rounded-lg border-2 border-on-surface bg-surface px-3 py-2 font-mono text-[11px] text-on-surface outline-none"
+                                          placeholder='Contoh: 3 atau "olleh"'
+                                          value={tc.expected}
+                                          onChange={e => {
+                                            const updatedTests = [...editingSyllabus.test_cases];
+                                            updatedTests[idx].expected = e.target.value;
+                                            setEditingSyllabus({ ...editingSyllabus, test_cases: updatedTests });
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : (

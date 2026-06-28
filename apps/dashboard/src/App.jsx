@@ -28,6 +28,7 @@ import TeacherActivity from './pages/TeacherActivity';
 import TeacherCreateCourse from './pages/TeacherCreateCourse';
 import TeacherCoursePreview from './pages/TeacherCoursePreview';
 import TeacherSettings from './pages/TeacherSettings';
+import TeacherDescriptionEditor from './pages/TeacherDescriptionEditor';
 import Community from './pages/Community';
 import CourseLearn from './pages/CourseLearn';
 import AIAssistant from './components/AIAssistant';
@@ -125,6 +126,7 @@ function AppContent() {
         <Route path="/teacher/courses/create"   element={P(<TeacherCreateCourse />)} />
         <Route path="/teacher/courses/edit/:id"    element={P(<TeacherCreateCourse />)} />
         <Route path="/teacher/courses/preview/:id" element={P(<TeacherCoursePreview />)} />
+        <Route path="/teacher/courses/description-editor" element={P(<TeacherDescriptionEditor />)} />
 
         {/* ── Public routes ── */}
         <Route path="/pricing"  element={<Pricing />} />
