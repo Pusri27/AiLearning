@@ -84,6 +84,11 @@ export default {
         "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
         "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
         "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "500" }]
+      },
+      keyframes: {
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' }
+        }
       }
     },
   },

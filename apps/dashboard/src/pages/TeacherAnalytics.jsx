@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
-
+import Skeleton from '../components/Skeleton';
 const DATE_RANGE_OPTIONS = [
   { label: 'Last 7 Days',  value: 7 },
   { label: 'Last 30 Days', value: 30 },
@@ -211,7 +211,7 @@ const TeacherAnalytics = () => {
             </div>
             <h3 className="font-bold text-sm opacity-80 mb-2">Total Revenue</h3>
             {loading ? (
-              <div className="h-10 bg-black/10 animate-pulse rounded-xl mb-4 w-3/4"></div>
+              <Skeleton className="h-10 rounded-xl mb-4 w-3/4" />
             ) : (
               <div className="text-2xl font-black mb-4 leading-tight">{formatRupiah(stats.revenue)}</div>
             )}
@@ -228,7 +228,7 @@ const TeacherAnalytics = () => {
             </div>
             <h3 className="font-bold text-sm opacity-80 mb-2">Total Students</h3>
             {loading ? (
-              <div className="h-10 bg-black/10 animate-pulse rounded-xl mb-4 w-1/4"></div>
+              <Skeleton className="h-10 rounded-xl mb-4 w-1/4" />
             ) : (
               <div className="text-4xl font-black mb-4">{stats.students}</div>
             )}
@@ -250,7 +250,7 @@ const TeacherAnalytics = () => {
             </div>
             <h3 className="font-bold text-sm opacity-80 mb-2">Avg. Completion</h3>
             {loading ? (
-              <div className="h-10 bg-black/10 animate-pulse rounded-xl mb-4 w-1/4"></div>
+              <Skeleton className="h-10 rounded-xl mb-4 w-1/4" />
             ) : (
               <div className="text-4xl font-black mb-4">{stats.completion}%</div>
             )}
@@ -266,7 +266,7 @@ const TeacherAnalytics = () => {
           <div className="bg-white text-on-surface p-6 rounded-[32px] border-2 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
             <h3 className="font-bold text-sm text-on-surface-variant mb-2">Active Today</h3>
             {loading ? (
-              <div className="h-10 bg-surface-container animate-pulse rounded-xl mb-4 w-1/4"></div>
+              <Skeleton className="h-10 rounded-xl mb-4 w-1/4" />
             ) : (
               <div className="text-4xl font-black mb-4">{stats.activeToday}</div>
             )}
@@ -297,7 +297,7 @@ const TeacherAnalytics = () => {
             {loading ? (
               <div className="flex-1 flex items-end gap-4 min-h-[200px]">
                 {[1,2,3,4].map(i => (
-                  <div key={i} className="flex-1 bg-surface-container animate-pulse rounded-t-2xl" style={{height: `${i*20+20}%`}}></div>
+                  <Skeleton key={i} className="flex-1 rounded-t-2xl rounded-b-none" style={{height: `${i*20+20}%`}} />
                 ))}
               </div>
             ) : (
