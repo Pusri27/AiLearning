@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
@@ -11,50 +12,6 @@ const TeacherStudents = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterCourse, setFilterCourse] = useState('All');
-  const [allCourses, setAllCourses] = useState([]);
-
-  // Detail modal state
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [detailData, setDetailData] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [issuingCert, setIssuingCert] = useState(false);
-  const [teacherUserId, setTeacherUserId] = useState(null);
-  // Certificate upload modal
-  const [certModal, setCertModal] = useState(null); // {courseId, courseName}
-  const [certFile, setCertFile] = useState(null);
-  const [certPreview, setCertPreview] = useState(null);
-  const [uploadingCert, setUploadingCert] = useState(false);
-  const [codeModal, setCodeModal] = useState(null); // {title: string, code: string}
-  const [codeOutput, setCodeOutput] = useState("");
-
-  const handleRunCodeTeacher = (code) => {
-    setCodeOutput("🚀 Menjalankan kode...\n");
-    let logs = [];
-    const customConsole = {
-      log: (...args) => {
-        logs.push(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '));
-      },
-      error: (...args) => {
-        logs.push("❌ Error: " + args.join(' '));
-      }
-    };
-
-    setTimeout(() => {
-      try {
-        if (code.includes("eval") || code.includes("Function")) { 
-          throw new Error("Penggunaan eval atau Function tidak diizinkan."); 
-        }
-        
-        const runContext = new Function("console", code);
-        logs = [];
-        runContext(customConsole);
-        setCodeOutput(logs.length > 0 ? logs.join('\n') : "Berhasil dijalankan (tidak ada output console).");
-      } catch (err) { 
-        setCodeOutput(`❌ SYNTAX/RUNTIME ERROR:\n${err.message}`); 
-      }
-    }, 500);
-  };
 
   // Student Detail Modal States
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -65,18 +22,30 @@ const TeacherStudents = () => {
     const fetchData = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      setTeacherUserId(session.user.id);
+      
+      if (!session) {
+        navigate('/login');
+        return;
+      }
 
       const { data: profile } = await supabase
-        .from('profiles').select('role, full_name').eq('id', session.user.id).single();
-      if (profile?.role !== 'teacher') { navigate('/'); return; }
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile?.role !== 'teacher') {
+        navigate('/');
+        return;
+      }
+
       setUser({ ...session.user, full_name: profile.full_name });
 
-      // Step 1: Teacher courses
+      // Fetch Real Students from Enrollments
       const { data: teacherCourses } = await supabase
-        .from('courses').select('id, title, course_syllabus(id)').eq('instructor_id', session.user.id);
+        .from('courses')
+        .select('id, title')
+        .eq('instructor_id', session.user.id);
 
       const courseIds = teacherCourses?.map(c => c.id) || [];
       
@@ -121,12 +90,6 @@ const TeacherStudents = () => {
             }
           }
         });
-        s.progress = totalSyl > 0 ? Math.round((doneSyl / totalSyl) * 100) : 0;
-        // Add certificate info per course
-        s.certifiedCourses = (certificates || [])
-          .filter(cert => String(cert.user_id) === String(sId))
-          .map(cert => String(cert.course_id));
-      });
 
         // Compute average progress
         const studentList = Object.values(studentMap).map(s => ({
@@ -139,6 +102,7 @@ const TeacherStudents = () => {
 
       setLoading(false);
     };
+
     fetchData();
   }, [navigate]);
 
@@ -222,164 +186,21 @@ const TeacherStudents = () => {
     s.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-    try {
-      const courseIds = student.courses.map(c => c.id);
-      console.log('[openDetail] courseIds:', courseIds, 'studentId:', student.id);
-
-      // Fetch full syllabus list for each course
-      const { data: syllabuses, error: sylErr } = await supabase
-        .from('course_syllabus')
-        .select('id, title, sort_order, assignment_text, course_id')
-        .in('course_id', courseIds)
-        .order('sort_order', { ascending: true });
-      if (sylErr) console.warn('[openDetail] syllabus error:', sylErr.message);
-
-      // Fetch completed syllabus IDs for this student
-      const { data: progress, error: progErr } = await supabase
-        .from('user_progress')
-        .select('syllabus_id, course_id')
-        .eq('user_id', student.id)
-        .in('course_id', courseIds);
-      if (progErr) console.warn('[openDetail] progress error:', progErr.message);
-
-      const completedSylIds = progress?.map(p => p.syllabus_id) || [];
-
-      // Fetch submissions — try user_id first, fallback to student_id column name
-      let submissions = [];
-      const { data: subData, error: subErr } = await supabase
-        .from('submissions')
-        .select('syllabus_id, course_id, file_url, assignment_text, submitted_at')
-        .eq('user_id', student.id)
-        .in('course_id', courseIds)
-        .order('submitted_at', { ascending: false });
-      if (subErr) {
-        console.warn('[openDetail] submissions (user_id) error:', subErr.message, '— trying student_id...');
-        const { data: subData2 } = await supabase
-          .from('submissions')
-          .select('syllabus_id, course_id, file_url, assignment_text, submitted_at')
-          .eq('student_id', student.id)
-          .in('course_id', courseIds)
-          .order('submitted_at', { ascending: false });
-        submissions = subData2 || [];
-      } else {
-        submissions = subData || [];
-      }
-      console.log('[openDetail] submissions:', submissions.length, '| completedSylIds:', completedSylIds.length);
-
-      // Check existing certificates
-      const { data: certs, error: certErr } = await supabase
-        .from('certificates')
-        .select('course_id, issued_at, certificate_url')
-        .eq('user_id', student.id)
-        .in('course_id', courseIds);
-      if (certErr) console.warn('[openDetail] certs error:', certErr.message);
-
-      setDetailData({
-        syllabuses: syllabuses || [],
-        completedSylIds,
-        submissions,
-        certificates: certs || [],
-      });
-    } catch (err) {
-      console.error('[openDetail] unexpected error:', err);
-      showToast('Gagal memuat detail siswa.', 'error');
-      setSelectedStudent(null);
-    } finally {
-      setLoadingDetail(false);
-    }
+  const getInitials = (name) => {
+    return name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-
-  const openCertModal = (courseId, courseName) => {
-    setCertModal({ courseId, courseName });
-    setCertFile(null);
-    setCertPreview(null);
-  };
-
-  const handleCertFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setCertFile(file);
-    setCertPreview(URL.createObjectURL(file));
-  };
-
-  const handleIssueCertificate = async () => {
-    if (!certFile || !certModal) return;
-    setUploadingCert(true);
-    try {
-      // Upload to storage
-      const ext = certFile.name.split('.').pop();
-      const path = `certificates/${selectedStudent.id}_${certModal.courseId}_${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('certificates')
-        .upload(path, certFile, { upsert: true });
-      if (upErr) throw upErr;
-
-      const { data: urlData } = supabase.storage.from('certificates').getPublicUrl(path);
-      const certUrl = urlData?.publicUrl;
-
-      // Check if cert already exists → update, else insert
-      const { data: existing } = await supabase
-        .from('certificates')
-        .select('id')
-        .eq('user_id', selectedStudent.id)
-        .eq('course_id', certModal.courseId)
-        .maybeSingle();
-
-      let certError;
-      if (existing) {
-        // Update existing certificate with new image
-        const { error } = await supabase
-          .from('certificates')
-          .update({ certificate_url: certUrl })
-          .eq('id', existing.id);
-        certError = error;
-      } else {
-        // Insert new certificate
-        const { error } = await supabase
-          .from('certificates')
-          .insert({
-            user_id: selectedStudent.id,
-            course_id: certModal.courseId,
-            certificate_url: certUrl,
-          });
-        certError = error;
-      }
-      if (certError) throw certError;
-
-      showToast('Sertifikat berhasil diberikan! 🎓', 'success');
-      setCertModal(null);
-      await openDetail(selectedStudent);
-    } catch (err) {
-      showToast('Gagal: ' + err.message, 'error');
-    } finally {
-      setUploadingCert(false);
-    }
-  };
-
-  const filteredStudents = students.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCourse = filterCourse === 'All' || s.courseTitles.includes(filterCourse);
-    return matchesSearch && matchesCourse;
-  });
 
   return (
-    <div className="bg-surface font-sans text-on-surface min-h-screen antialiased flex">
-      <TeacherSidebar user={user} />
+    <div className="bg-surface text-on-surface font-sans antialiased min-h-screen flex">
+      <TeacherSidebar user={user} onOpenModal={() => navigate('/teacher/courses')} />
 
-      {/* ─── Certificate Upload Modal ─── */}
-      {certModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-white rounded-[40px] border-4 border-on-surface shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-2xl font-black">Upload Sertifikat</h3>
-                <p className="text-sm text-on-surface-variant font-bold mt-1">Untuk: <span className="text-primary">{selectedStudent?.name}</span></p>
-                <p className="text-xs text-on-surface-variant font-bold">Kursus: {certModal.courseName}</p>
-              </div>
-              <button onClick={() => setCertModal(null)} className="p-2 hover:bg-surface-container rounded-xl">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 lg:ml-[280px] pt-20 lg:pt-0 pb-24 lg:pb-8 px-margin-mobile lg:px-margin-desktop bg-surface relative">
+        {/* Header Section */}
+        <div className="py-8 lg:py-10">
+          <h2 className="text-4xl lg:text-6xl font-black text-on-surface mb-2">Students</h2>
+          <p className="text-lg text-on-surface-variant max-w-2xl">Manage your enrolled learners, track their progress, and ensure everyone is staying on course.</p>
+        </div>
 
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -413,58 +234,45 @@ const TeacherStudents = () => {
                 key={student.email}
                 className="group bg-surface-container-lowest border-2 border-outline-variant rounded-[32px] p-6 lg:px-8 lg:py-6 shadow-sm hover:shadow-xl hover:border-primary transition-all duration-300 flex flex-col md:grid md:grid-cols-12 gap-6 items-start md:items-center relative overflow-hidden"
               >
-                Batal
-              </button>
-              <button
-                onClick={handleIssueCertificate}
-                disabled={!certFile || uploadingCert}
-                className="flex-1 py-4 rounded-2xl bg-primary text-on-primary border-2 border-on-surface font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {uploadingCert ? (
-                  <><span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Mengirim...</>
-                ) : '🎓 Kirim Sertifikat'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Code Modal */}
-      {codeModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) { setCodeModal(null); setCodeOutput(""); } }}>
-          <div className="bg-[#181818] rounded-[32px] border-4 border-on-surface shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-3xl flex flex-col max-h-[85vh]">
-            <div className="flex items-center justify-between p-6 border-b-2 border-white/10">
-              <div>
-                <h3 className="text-xl font-black text-white">Jawaban Coding</h3>
-                <p className="text-sm text-gray-400 font-bold mt-1">{codeModal.title}</p>
-              </div>
-              <button onClick={() => { setCodeModal(null); setCodeOutput(""); }} className="p-2 hover:bg-white/10 rounded-xl text-white transition-colors">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="flex-1 p-6 overflow-y-auto flex flex-col gap-4">
-              <pre className="font-mono text-sm text-green-400 whitespace-pre-wrap flex-1">{codeModal.code}</pre>
-              
-              <div className="pt-4 border-t border-white/10">
-                <button 
-                  onClick={() => handleRunCodeTeacher(codeModal.code)}
-                  className="px-6 py-2 bg-green-500 text-black font-black uppercase text-xs rounded border-2 border-black shadow-[3px_3px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all mb-4"
-                >
-                  Run Code
-                </button>
-                {codeOutput && (
-                  <div className="p-4 bg-black rounded-lg border-2 border-white/10 font-mono text-xs text-white max-h-48 overflow-y-auto">
-                    <div className="flex items-center gap-2 mb-2 text-gray-500 border-b border-white/5 pb-1 uppercase text-[9px] font-black">
-                      <span className="material-symbols-outlined text-xs">terminal</span> Terminal Output
-                    </div>
-                    <pre className="whitespace-pre-wrap leading-relaxed">{codeOutput}</pre>
+                <div className={`absolute top-0 left-0 w-2 h-full ${idx % 2 === 0 ? 'bg-primary' : 'bg-secondary'} opacity-0 group-hover:opacity-100 transition-opacity`}></div>
+                
+                {/* Info */}
+                <div className="col-span-4 flex items-center gap-4 w-full">
+                  <div className={`w-14 h-14 rounded-full flex-shrink-0 flex items-center justify-center border-2 border-surface-container-lowest shadow-sm text-xl font-black ${
+                    idx % 3 === 0 ? 'bg-tertiary-container text-on-tertiary-container' : 
+                    idx % 3 === 1 ? 'bg-secondary-container text-on-secondary-container' : 
+                    'bg-error-container text-on-error-container'
+                  }`}>
+                    {getInitials(student.name)}
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-black text-on-surface truncate">{student.name}</h3>
+                    <p className="text-sm font-bold text-on-surface-variant truncate">{student.email}</p>
+                  </div>
+                </div>
+
+                {/* Courses */}
+                <div className="col-span-3 flex flex-wrap gap-2 w-full">
+                  {student.courses.slice(0, 1).map((c, i) => (
+                    <span key={i} className="px-3 py-1 rounded-full border-2 border-outline-variant bg-surface text-on-surface text-xs font-bold">{c}</span>
+                  ))}
+                  {student.courses.length > 1 && (
+                    <span className="px-3 py-1 rounded-full border-2 border-outline-variant bg-surface text-on-surface text-xs font-bold">+{student.courses.length - 1} more</span>
+                  )}
+                </div>
+
+                {/* Progress */}
+                <div className="col-span-3 w-full">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold text-on-surface-variant">{student.progress}% Completed</span>
+                  </div>
+                  <div className="h-3 w-full bg-surface-container rounded-full overflow-hidden border border-outline-variant">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ${idx % 2 === 0 ? 'bg-primary' : 'bg-secondary'}`} 
+                      style={{ width: `${student.progress}%` }}
+                    ></div>
+                  </div>
+                </div>
 
                 {/* Action */}
                 <div className="col-span-2 w-full flex items-center justify-between md:justify-end gap-6">
@@ -479,9 +287,8 @@ const TeacherStudents = () => {
               </div>
             ))
           ) : (
-            <div className="text-center py-24 border-4 border-dashed border-outline-variant rounded-[40px]">
-              <span className="material-symbols-outlined text-6xl text-on-surface-variant mb-4 block">group</span>
-              <p className="text-on-surface-variant font-black text-xl">Belum ada siswa yang terdaftar.</p>
+            <div className="text-center py-20 border-4 border-dashed border-outline-variant rounded-[40px]">
+              <p className="text-on-surface-variant font-black">Belum ada siswa yang terdaftar.</p>
             </div>
           )}
         </div>

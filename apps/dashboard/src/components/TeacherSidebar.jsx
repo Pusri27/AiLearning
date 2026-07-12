@@ -3,22 +3,23 @@ import { supabase } from '../lib/supabaseClient';
 import Icon from './Icon';
 import { showToast } from '../lib/toast';
 
-const TeacherSidebar = () => {
+const TeacherSidebar = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleLogout = () => {
-    // Navigate instantly, fire signOut in background
-    navigate('/login');
-    supabase.auth.signOut().catch(() =>
-      showToast('Gagal logout. Silakan coba lagi.', 'error')
-    );
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      showToast('Gagal logout. Silakan coba lagi.', 'error');
+    } else {
+      navigate('/login');
+    }
   };
 
   const menuItems = [
     { name: 'Dashboard', icon: 'dashboard', path: '/teacher/dashboard' },
     { name: 'My Courses', icon: 'auto_stories', path: '/teacher/courses' },
-    { name: 'Students', icon: 'school', path: '/teacher/students' },
+    { name: 'Students', icon: 'group', path: '/teacher/students' },
     { name: 'Analytics', icon: 'monitoring', path: '/teacher/analytics' },
     { name: 'Community', icon: 'groups', path: '/community' },
     { name: 'Activity', icon: 'history', path: '/teacher/activity' },
@@ -36,6 +37,7 @@ const TeacherSidebar = () => {
             <Icon name="auto_awesome" className="w-10 h-10 text-primary group-hover:rotate-12 transition-transform" />
             <h1 className="text-3xl font-black text-primary">Harin</h1>
           </div>
+          <p className="text-[10px] uppercase tracking-widest text-on-surface-variant font-black mt-1 ml-1">Instructor Suite</p>
         </div>
 
         <button 
@@ -68,12 +70,9 @@ const TeacherSidebar = () => {
         </div>
 
         <div className="mt-auto space-y-2 pt-6 border-t border-outline-variant">
-          <button 
-            onClick={() => navigate('/')} 
-            className="w-full flex items-center gap-4 text-on-surface-variant p-4 hover:bg-surface-variant rounded-xl transition-all border-2 border-transparent hover:border-on-surface"
-          >
-            <Icon name="school" className="w-6 h-6" />
-            <span className="font-black text-sm">Portal Siswa</span>
+          <button className="w-full flex items-center gap-4 text-on-surface-variant p-4 hover:bg-surface-variant rounded-xl transition-all">
+            <Icon name="help" className="w-6 h-6" />
+            <span className="font-bold">Help</span>
           </button>
           <button onClick={handleLogout} className="w-full flex items-center gap-4 text-on-surface-variant p-4 hover:bg-surface-variant rounded-xl transition-all border-2 border-transparent hover:border-on-surface">
             <Icon name="logout" className="w-6 h-6" />
