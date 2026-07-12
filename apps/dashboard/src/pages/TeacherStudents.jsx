@@ -4,6 +4,7 @@ import ProfileDropdown from '../components/ProfileDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { showToast } from '../lib/toast';
 
 const TeacherStudents = () => {
   const navigate = useNavigate();
@@ -11,6 +12,11 @@ const TeacherStudents = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Student Detail Modal States
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentDetails, setStudentDetails] = useState({ enrollments: [], submissions: [], syllabus: [] });
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,8 +55,9 @@ const TeacherStudents = () => {
           .select(`
             id,
             enrolled_at,
-            course:course_id (title),
-            profile:user_id (full_name, email)
+            progress,
+            course:course_id (id, title),
+            profile:user_id (id, full_name, email)
           `)
           .in('course_id', courseIds)
           .order('enrolled_at', { ascending: false });
@@ -59,20 +66,38 @@ const TeacherStudents = () => {
         const studentMap = {};
         enrollments?.forEach(e => {
           const email = e.profile?.email;
+          const studentId = e.profile?.id;
+          if (!email) return;
+
           if (!studentMap[email]) {
             studentMap[email] = {
-              name: e.profile?.full_name,
+              id: studentId,
+              name: e.profile?.full_name || 'Pelajar Harin',
               email: email,
               courses: [e.course?.title],
+              courseList: [{ id: e.course?.id, title: e.course?.title, progress: e.progress || 0 }],
               lastActivity: e.enrolled_at,
-              progress: Math.floor(Math.random() * 100) // Mock progress for now
+              progressSum: e.progress || 0,
+              enrollmentCount: 1
             };
           } else {
             studentMap[email].courses.push(e.course?.title);
+            studentMap[email].courseList.push({ id: e.course?.id, title: e.course?.title, progress: e.progress || 0 });
+            studentMap[email].progressSum += e.progress || 0;
+            studentMap[email].enrollmentCount += 1;
+            if (new Date(e.enrolled_at) > new Date(studentMap[email].lastActivity)) {
+              studentMap[email].lastActivity = e.enrolled_at;
+            }
           }
         });
 
-        setStudents(Object.values(studentMap));
+        // Compute average progress
+        const studentList = Object.values(studentMap).map(s => ({
+          ...s,
+          progress: Math.round(s.progressSum / s.enrollmentCount)
+        }));
+
+        setStudents(studentList);
       }
 
       setLoading(false);
@@ -80,6 +105,81 @@ const TeacherStudents = () => {
 
     fetchData();
   }, [navigate]);
+
+  const handleOpenStudentDetail = async (student) => {
+    if (!student.id) {
+      showToast('ID siswa tidak valid.', 'error');
+      return;
+    }
+    setSelectedStudent(student);
+    setLoadingDetails(true);
+    try {
+      // 1. Fetch student enrollments
+      const { data: enrollData } = await supabase
+        .from('enrollments')
+        .select(`
+          id,
+          progress,
+          enrolled_at,
+          courses (
+            id,
+            title,
+            category
+          )
+        `)
+        .eq('user_id', student.id);
+
+      // 2. Fetch student submissions
+      const { data: subData, error: subErr } = await supabase
+        .from('submissions')
+        .select(`
+          id,
+          course_id,
+          syllabus_id,
+          file_url,
+          submitted_at
+        `)
+        .eq('student_id', student.id);
+      
+      let finalSubmissions = subData || [];
+      if (subErr) {
+        console.warn('Query student_id error, trying user_id...');
+        const { data: subData2 } = await supabase
+          .from('submissions')
+          .select(`
+            id,
+            course_id,
+            syllabus_id,
+            file_url,
+            submitted_at
+          `)
+          .eq('user_id', student.id);
+        finalSubmissions = subData2 || [];
+      }
+
+      // 3. Fetch syllabus to match title with submissions
+      const courseIds = enrollData?.map(e => e.courses?.id).filter(Boolean) || [];
+      let syllabusList = [];
+      if (courseIds.length > 0) {
+        const { data: sylData } = await supabase
+          .from('course_syllabus')
+          .select('id, course_id, title, type')
+          .in('course_id', courseIds);
+        syllabusList = sylData || [];
+      }
+
+      setStudentDetails({
+        enrollments: enrollData || [],
+        submissions: finalSubmissions,
+        syllabus: syllabusList
+      });
+    } catch (err) {
+      console.error('Error fetching student details:', err);
+      showToast('Gagal memuat detail tugas.', 'error');
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   const filteredStudents = students.filter(s => 
     s.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -105,7 +205,7 @@ const TeacherStudents = () => {
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
           <div className="relative flex-1 max-w-md">
-                <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline w-5 h-5" />
+            <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline w-5 h-5" />
             <input 
               className="w-full bg-surface-container-lowest border-2 border-outline-variant rounded-2xl py-3 pl-12 pr-4 font-bold text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary transition-all shadow-sm" 
               placeholder="Search by name or email..." 
@@ -114,10 +214,6 @@ const TeacherStudents = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <button className="flex items-center justify-center gap-2 px-6 py-3 bg-transparent border-2 border-outline-variant text-on-surface font-bold rounded-2xl hover:bg-surface-variant transition-all shadow-sm">
-                <Icon name="filter_list" className="w-5 h-5" />
-            Filter by Course
-          </button>
         </div>
 
         {/* Students List */}
@@ -127,7 +223,7 @@ const TeacherStudents = () => {
             <div className="col-span-4">Student</div>
             <div className="col-span-3">Active Courses</div>
             <div className="col-span-3">Overall Progress</div>
-            <div className="col-span-2 text-right">Last Activity</div>
+            <div className="col-span-2 text-right">Action</div>
           </div>
 
           {loading ? (
@@ -178,13 +274,14 @@ const TeacherStudents = () => {
                   </div>
                 </div>
 
-                {/* Activity & Action */}
+                {/* Action */}
                 <div className="col-span-2 w-full flex items-center justify-between md:justify-end gap-6">
-                  <span className="text-sm font-bold text-on-surface-variant whitespace-nowrap">
-                    {new Date(student.lastActivity).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                  </span>
-                  <button className="w-10 h-10 rounded-full hover:bg-surface-variant flex items-center justify-center text-on-surface-variant transition-colors border-2 border-transparent hover:border-outline">
-                    <span className="material-symbols-outlined">more_vert</span>
+                  <button 
+                    onClick={() => handleOpenStudentDetail(student)}
+                    className="w-full md:w-auto px-4 py-2.5 bg-primary text-on-primary border-2 border-on-surface font-black text-xs rounded-xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-sm">visibility</span>
+                    Detail & Tugas
                   </button>
                 </div>
               </div>
@@ -195,23 +292,103 @@ const TeacherStudents = () => {
             </div>
           )}
         </div>
-
-        {/* Pagination */}
-        {filteredStudents.length > 0 && (
-          <div className="mt-12 flex justify-center items-center gap-3">
-            <button className="w-12 h-12 rounded-2xl bg-surface-container-lowest border-2 border-outline-variant flex items-center justify-center hover:bg-surface-variant transition-all shadow-sm">
-              <span className="material-symbols-outlined">chevron_left</span>
-            </button>
-            <button className="w-12 h-12 rounded-2xl bg-primary text-on-primary font-black flex items-center justify-center shadow-lg">1</button>
-            <button className="w-12 h-12 rounded-2xl bg-surface-container-lowest border-2 border-outline-variant font-black flex items-center justify-center hover:bg-surface-variant transition-all shadow-sm">2</button>
-            <button className="w-12 h-12 rounded-2xl bg-surface-container-lowest border-2 border-outline-variant flex items-center justify-center hover:bg-surface-variant transition-all shadow-sm">
-              <span className="material-symbols-outlined">chevron_right</span>
-            </button>
-          </div>
-        )}
       </main>
+
+      {/* Student Detail Modal */}
+      {selectedStudent && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-[32px] border-4 border-on-surface p-8 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] text-on-surface relative">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-primary-container text-on-primary-container border-2 border-on-surface flex items-center justify-center font-black text-xl shadow-[2px_2px_0px_0px_#000]">
+                  {getInitials(selectedStudent.name)}
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black">{selectedStudent.name}</h3>
+                  <p className="text-sm font-medium text-on-surface-variant">{selectedStudent.email}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedStudent(null)}
+                className="w-10 h-10 rounded-full border-2 border-on-surface hover:bg-surface-variant flex items-center justify-center font-bold text-on-surface hover:text-red-500 transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {loadingDetails ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3">
+                <div className="w-10 h-10 border-4 border-on-surface border-t-primary rounded-full animate-spin"></div>
+                <p className="text-sm font-bold text-on-surface-variant">Memuat data progres & tugas...</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Course Enrollments & Progress */}
+                <div>
+                  <h4 className="text-lg font-black mb-4 border-b-2 border-on-surface pb-1 uppercase tracking-wider text-primary">Progres Kursus</h4>
+                  <div className="space-y-4">
+                    {studentDetails.enrollments.map((enroll) => (
+                      <div key={enroll.id} className="p-4 border-2 border-on-surface rounded-2xl bg-surface-container-low shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-black text-base">{enroll.courses?.title}</span>
+                          <span className="text-sm font-black text-primary">{enroll.progress || 0}%</span>
+                        </div>
+                        <div className="w-full h-3 bg-white border-2 border-on-surface rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${enroll.progress || 0}%` }}></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] font-bold text-on-surface-variant mt-2">
+                          <span>Mulai: {new Date(enroll.enrolled_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          <span>{enroll.progress >= 100 ? 'Selesai' : 'Sedang Berjalan'}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {studentDetails.enrollments.length === 0 && (
+                      <p className="text-sm font-medium text-on-surface-variant italic">Belum ada kursus aktif.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Submissions / Assignments */}
+                <div>
+                  <h4 className="text-lg font-black mb-4 border-b-2 border-on-surface pb-1 uppercase tracking-wider text-secondary">Tugas yang Dikirim</h4>
+                  <div className="space-y-4">
+                    {studentDetails.submissions.map((sub) => {
+                      const syl = studentDetails.syllabus?.find(s => String(s.id) === String(sub.syllabus_id));
+                      const courseTitle = studentDetails.enrollments.find(e => String(e.courses?.id) === String(sub.course_id))?.courses?.title || 'Kursus';
+                      return (
+                        <div key={sub.id} className="p-4 border-2 border-on-surface rounded-2xl bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                          <div>
+                            <p className="text-[10px] font-black uppercase text-on-surface-variant mb-0.5">{courseTitle}</p>
+                            <h5 className="font-black text-base">{syl?.title || 'Materi/Tugas'}</h5>
+                            <p className="text-xs text-on-surface-variant font-bold">Dikirim pada: {new Date(sub.submitted_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                          {sub.file_url ? (
+                            <button
+                              onClick={() => window.open(sub.file_url, '_blank')}
+                              className="px-4 py-2.5 bg-secondary text-on-secondary border-2 border-on-surface font-black text-xs rounded-xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all flex items-center gap-1 shrink-0"
+                            >
+                              <span className="material-symbols-outlined text-sm">open_in_new</span>
+                              Lihat Tugas
+                            </button>
+                          ) : (
+                            <span className="text-xs font-bold text-on-surface-variant italic">Tidak ada file</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {studentDetails.submissions.length === 0 && (
+                      <p className="text-sm font-medium text-on-surface-variant italic">Belum ada tugas yang dikirim oleh siswa.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default TeacherStudents;
+

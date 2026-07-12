@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
+import TeacherSidebar from '../components/TeacherSidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
@@ -620,7 +621,7 @@ const Community = () => {
 
   return (
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
-      <Sidebar />
+      {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
       <main className="flex-1 flex overflow-hidden">
         

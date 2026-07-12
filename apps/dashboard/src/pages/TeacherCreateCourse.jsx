@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
@@ -22,6 +22,12 @@ const TeacherCreateCourse = () => {
     image_url: ''
   });
 
+  // Signature Pad State
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureData, setSignatureData] = useState('');
+  const [isSignatureConfirmed, setIsSignatureConfirmed] = useState(false);
+
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -32,7 +38,7 @@ const TeacherCreateCourse = () => {
       
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, full_name')
+        .select('role, full_name, signature_url')
         .eq('id', session.user.id)
         .single();
 
@@ -41,9 +47,104 @@ const TeacherCreateCourse = () => {
         return;
       }
       setUser({ ...session.user, full_name: profile.full_name });
+
+      // If user already has a signature, load it
+      if (profile.signature_url) {
+        setSignatureData(profile.signature_url);
+        setIsSignatureConfirmed(true);
+        setTimeout(() => {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = profile.signature_url;
+          }
+        }, 300);
+      }
     };
     checkUser();
   }, [navigate]);
+
+  // Initialize Canvas events for Signature Drawing
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#1c1b1b';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const getPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      if (e.touches && e.touches[0]) {
+        return {
+          x: e.touches[0].clientX - rect.left,
+          y: e.touches[0].clientY - rect.top
+        };
+      }
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    };
+
+    const startDrawing = (e) => {
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      setIsDrawing(true);
+    };
+
+    const draw = (e) => {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    };
+
+    const stopDrawing = () => {
+      if (isDrawing) {
+        ctx.closePath();
+        setIsDrawing(false);
+        setSignatureData(canvas.toDataURL());
+      }
+    };
+
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
+
+    canvas.addEventListener('touchstart', startDrawing, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
+    canvas.addEventListener('touchend', stopDrawing);
+
+    return () => {
+      canvas.removeEventListener('mousedown', startDrawing);
+      canvas.removeEventListener('mousemove', draw);
+      canvas.removeEventListener('mouseup', stopDrawing);
+      canvas.removeEventListener('mouseleave', stopDrawing);
+
+      canvas.removeEventListener('touchstart', startDrawing);
+      canvas.removeEventListener('touchmove', draw);
+      canvas.removeEventListener('touchend', stopDrawing);
+    };
+  }, [isDrawing]);
+
+  const handleClearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureData('');
+    setIsSignatureConfirmed(false);
+  };
 
   const handleInputChange = (e) => {
     const { id, value } = e.target;
@@ -58,8 +159,29 @@ const TeacherCreateCourse = () => {
       return;
     }
 
+    if (!signatureData) {
+      showToast('Anda harus menandatangani di area Tanda Tangan Pengajar terlebih dahulu.', 'error');
+      return;
+    }
+
+    if (!isSignatureConfirmed) {
+      showToast('Mohon setujui pernyataan konfirmasi tanda tangan.', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
+      // 1. Save signature to teacher profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ signature_url: signatureData })
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.warn('Gagal menyimpan tanda tangan ke profiles (signature_url):', profileError.message);
+      }
+
+      // 2. Publish Course
       const { error } = await supabase
         .from('courses')
         .insert([
@@ -245,9 +367,10 @@ const TeacherCreateCourse = () => {
             </section>
           </div>
 
-          {/* Right Column: Media */}
+          {/* Right Column: Media & Signature */}
           <div className="col-span-1 lg:col-span-4 flex flex-col gap-10">
-            <section className="bg-white rounded-[40px] p-8 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] lg:sticky lg:top-28">
+            {/* Media Card */}
+            <section className="bg-white rounded-[40px] p-8 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
               <div className="flex items-center gap-4 mb-8">
                 <div className="w-12 h-12 bg-tertiary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
                   <span className="material-symbols-outlined text-on-tertiary-container font-black">perm_media</span>
@@ -287,6 +410,59 @@ const TeacherCreateCourse = () => {
                    <span className="font-black flex items-center gap-1 mb-1"><BulbIcon className="w-4 h-4 text-primary" /> Tips:</span> Gunakan gambar yang menarik untuk meningkatkan minat calon siswa hingga 40%.
                  </p>
               </div>
+            </section>
+
+            {/* Signature Card */}
+            <section className="bg-white rounded-[40px] p-8 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-primary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
+                  <span className="material-symbols-outlined text-on-primary-container font-black">draw</span>
+                </div>
+                <h2 className="text-xl font-black text-on-surface">Tanda Tangan</h2>
+              </div>
+
+              <p className="text-xs text-on-surface-variant font-bold mb-4">Gambarkan tanda tangan Anda di bawah untuk sertifikat kelulusan siswa.</p>
+
+              <div className="relative w-full aspect-[2/1] rounded-2xl border-4 border-on-surface bg-surface-container-lowest overflow-hidden mb-4">
+                <canvas 
+                  ref={canvasRef} 
+                  width={350} 
+                  height={175} 
+                  className="w-full h-full cursor-crosshair touch-none"
+                />
+                {!signatureData && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40 select-none">
+                    <p className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Tanda tangan di sini</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center mb-6">
+                <button
+                  type="button"
+                  onClick={handleClearSignature}
+                  className="px-4 py-2 rounded-xl border-2 border-on-surface font-black text-xs text-on-surface hover:bg-surface-variant transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none"
+                >
+                  Hapus Pad
+                </button>
+                {signatureData && (
+                  <span className="text-[10px] font-black text-green-600 uppercase flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm font-black">check_circle</span> Tanda Tangan OK
+                  </span>
+                )}
+              </div>
+
+              <label className="flex gap-3 items-start cursor-pointer group">
+                <input 
+                  type="checkbox"
+                  checked={isSignatureConfirmed}
+                  onChange={(e) => setIsSignatureConfirmed(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-2 border-on-surface text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                />
+                <span className="text-[11px] font-bold text-on-surface-variant group-hover:text-on-surface transition-colors leading-tight">
+                  Saya menyatakan bahwa tanda tangan ini sah untuk ditampilkan pada sertifikat kelulusan siswa Harin Academy.
+                </span>
+              </label>
             </section>
           </div>
         </form>

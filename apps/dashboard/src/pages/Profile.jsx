@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
+import TeacherSidebar from '../components/TeacherSidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
@@ -86,7 +87,7 @@ const Profile = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background font-body-md text-on-background">
-      <Sidebar />
+      {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Header */}
         <header className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
@@ -294,12 +295,14 @@ const Profile = () => {
       </div>
 
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-        <NavLink to="/"        className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard"       className="w-6 h-6" /></NavLink>
-        <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book"       className="w-6 h-6" /></NavLink>
-        <NavLink to="/profile" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="account_circle" className="w-6 h-6" /></NavLink>
-        <NavLink to="/settings"className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="settings"        className="w-6 h-6" /></NavLink>
-      </nav>
+      {profile.role !== 'teacher' && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
+          <NavLink to="/"        className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard"       className="w-6 h-6" /></NavLink>
+          <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book"       className="w-6 h-6" /></NavLink>
+          <NavLink to="/profile" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="account_circle" className="w-6 h-6" /></NavLink>
+          <NavLink to="/settings"className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="settings"        className="w-6 h-6" /></NavLink>
+        </nav>
+      )}
     </div>
   );
 };
