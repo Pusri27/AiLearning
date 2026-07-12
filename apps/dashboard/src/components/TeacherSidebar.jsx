@@ -30,16 +30,11 @@ const TeacherSidebar = () => {
   return (
     <>
       {/* Desktop Side Navigation */}
-      <nav className="hidden lg:flex flex-col h-screen overflow-y-auto p-6 border-r-4 border-on-surface bg-surface-container-lowest fixed left-0 top-0 w-[280px] z-[60] pointer-events-auto">
-        <div className="mb-12 cursor-pointer group" onClick={() => navigate('/')}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-primary text-on-primary rounded-xl border-2 border-on-surface flex items-center justify-center font-black text-xl shadow-[2.5px_2.5px_0px_0px_rgba(0,0,0,1)] group-hover:rotate-6 transition-transform">
-              H
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-on-surface leading-none tracking-tight">Harin<span className="text-primary font-black">.</span></h1>
-              <p className="text-[9px] uppercase tracking-widest text-on-surface-variant font-black mt-0.5">INSTRUCTOR SUITE</p>
-            </div>
+      <nav className="hidden lg:flex flex-col h-full p-6 border-r-4 border-on-surface bg-surface-container-lowest fixed left-0 top-0 w-[280px] z-[60] pointer-events-auto">
+        <div className="mb-12 cursor-pointer group" onClick={() => navigate('/teacher/dashboard')}>
+          <div className="flex items-center gap-2">
+            <Icon name="auto_awesome" className="w-10 h-10 text-primary group-hover:rotate-12 transition-transform" />
+            <h1 className="text-3xl font-black text-primary">Harin</h1>
           </div>
         </div>
 

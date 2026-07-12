@@ -51,8 +51,8 @@ const Achievements = () => {
         const [certRes, earnedAchRes, allAchRes, enrollmentRes] = await Promise.all([
           // 1. Get certificates issued by teacher from certificates table
           supabase
-            .from('certificates')
-            .select('id, course_id, issued_at, certificate_url, courses(title, category, image_url)')
+            .from('enrollments')
+            .select('id, enrolled_at, courses(id, title, category, image_url, instructor, instructor_id)')
             .eq('user_id', uid)
             .order('issued_at', { ascending: false }),
 
@@ -99,10 +99,35 @@ const Achievements = () => {
           }
         });
 
+        // Fetch instructor profiles for signatures
+        const instructorIds = [...new Set(completedCourses.map(e => e.courses?.instructor_id).filter(Boolean))];
+        let instructorsMap = {};
+        if (instructorIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, full_name, signature_url')
+            .in('id', instructorIds);
+          if (profilesData) {
+            profilesData.forEach(p => {
+              instructorsMap[p.id] = p;
+            });
+          }
+        }
+
+        // Attach instructor info
+        const completedCoursesWithInstructors = completedCourses.map(e => {
+          const instId = e.courses?.instructor_id;
+          return {
+            ...e,
+            instructorProfile: instId ? instructorsMap[instId] : null
+          };
+        });
+
+        // Categorize Badges
         const earned = allBadges.filter(b => earnedIds.includes(b.id));
         const locked = allBadges.filter(b => !earnedIds.includes(b.id));
 
-        setCertificates(mergedCerts);
+        setCertificates(completedCoursesWithInstructors);
         setEarnedBadges(earned);
         setLockedBadges(locked);
         setStats({ certificates: mergedCerts.length, badges: earned.length });
@@ -217,6 +242,275 @@ const Achievements = () => {
     printWindow.document.close();
   };
 
+  const handlePrintCertificate = (cert) => {
+    const studentName = profile.fullName || profile.full_name || 'Pelajar Harin';
+    const courseTitle = cert.courses?.title || 'Kursus';
+    const issueDate = formatDate(cert.enrolled_at);
+    const instructorName = cert.instructorProfile?.full_name || cert.courses?.instructor || 'Pengajar Harin';
+    const signatureUrl = cert.instructorProfile?.signature_url || '';
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Popup blocker aktif! Izinkan popup untuk mencetak sertifikat.');
+      return;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Sertifikat Kelulusan - ${courseTitle}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Cinzel:wght@600;800&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+        <style>
+          @page {
+            size: landscape;
+            margin: 0;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background-color: #f3f4f6;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-print-color-adjust: exact;
+          }
+          .cert-container {
+            width: 297mm;
+            height: 210mm;
+            box-sizing: border-box;
+            background: #ffffff;
+            position: relative;
+            padding: 20mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+            border: 15px solid #1c1b1b;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.05);
+          }
+          .cert-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #ffe082;
+            border: 3px solid #1c1b1b;
+            padding: 10px 20px;
+            font-weight: 800;
+            font-size: 14px;
+            transform: rotate(5deg);
+            box-shadow: 4px 4px 0px 0px #1c1b1b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+          .accent-line-1 {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 10px;
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+          }
+          .logo-container {
+            text-align: center;
+            margin-top: 10px;
+          }
+          .logo-text {
+            font-family: 'Cinzel', serif;
+            font-size: 28px;
+            font-weight: 800;
+            color: #1c1b1b;
+            letter-spacing: 3px;
+          }
+          .logo-subtitle {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: #6b7280;
+            margin-top: 5px;
+          }
+          .content-container {
+            text-align: center;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            margin: 20px 0;
+          }
+          .cert-title {
+            font-family: 'Cinzel', serif;
+            font-size: 42px;
+            font-weight: 800;
+            color: #1c1b1b;
+            margin: 0;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+          }
+          .cert-subtitle {
+            font-size: 16px;
+            color: #4b5563;
+            margin: 15px 0 30px 0;
+            font-weight: 600;
+          }
+          .student-name {
+            font-size: 38px;
+            font-weight: 800;
+            color: #6366f1;
+            margin: 10px 0;
+            text-decoration: underline;
+            text-underline-offset: 8px;
+            text-decoration-color: #1c1b1b;
+            text-decoration-thickness: 3px;
+          }
+          .cert-text {
+            font-size: 14px;
+            color: #4b5563;
+            max-width: 700px;
+            margin: 20px auto;
+            line-height: 1.6;
+            font-weight: 500;
+          }
+          .course-title {
+            font-size: 24px;
+            font-weight: 800;
+            color: #1c1b1b;
+            display: inline-block;
+            border-bottom: 2px solid #a855f7;
+            padding-bottom: 4px;
+          }
+          .footer-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 40px;
+            margin-bottom: 10px;
+          }
+          .footer-col {
+            width: 30%;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          .signature-wrapper {
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+          }
+          .signature-image {
+            max-height: 65px;
+            max-width: 160px;
+            object-fit: contain;
+          }
+          .signature-text {
+            font-family: 'Caveat', cursive;
+            font-size: 32px;
+            color: #4f46e5;
+            line-height: 1;
+          }
+          .footer-line {
+            width: 100%;
+            height: 2px;
+            background-color: #1c1b1b;
+            margin-bottom: 8px;
+          }
+          .footer-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+          }
+          .footer-value {
+            font-size: 13px;
+            font-weight: 800;
+            color: #1c1b1b;
+          }
+          @media print {
+            body {
+              background-color: #ffffff;
+            }
+            .cert-container {
+              box-shadow: none;
+              page-break-inside: avoid;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="cert-container">
+          <div class="accent-line-1"></div>
+          <div class="cert-badge">Official Certified</div>
+          
+          <div class="logo-container">
+            <div class="logo-text">Harin Academy</div>
+            <div class="logo-subtitle">Pusat Keunggulan Teknologi & AI</div>
+          </div>
+
+          <div class="content-container">
+            <h1 class="cert-title">Sertifikat Kelulusan</h1>
+            <p class="cert-subtitle">Dengan bangga mempersembahkan penghargaan ini kepada:</p>
+            <div class="student-name">${studentName}</div>
+            <p class="cert-text">
+              yang telah menyelesaikan dengan sangat baik seluruh kurikulum pelatihan dan ujian kompetensi untuk program pembelajaran:
+              <br><br>
+              <span class="course-title">${courseTitle}</span>
+            </p>
+          </div>
+
+          <div class="footer-container">
+            <div class="footer-col">
+              <div class="signature-wrapper" style="font-size: 14px; font-weight: 800; color: #4b5563; display: flex; align-items: flex-end;">
+                ${issueDate}
+              </div>
+              <div class="footer-line"></div>
+              <div class="footer-label">Tanggal Kelulusan</div>
+            </div>
+
+            <div class="footer-col">
+              <div class="signature-wrapper">
+                ${signatureUrl 
+                  ? `<img src="${signatureUrl}" class="signature-image" alt="Tanda Tangan Pengajar" />` 
+                  : `<span class="signature-text">${instructorName}</span>`
+                }
+              </div>
+              <div class="footer-line"></div>
+              <div class="footer-value">${instructorName}</div>
+              <div class="footer-label">Instruktur Kelas</div>
+            </div>
+
+            <div class="footer-col">
+              <div class="signature-wrapper" style="display: flex; align-items: center; justify-content: center;">
+                <svg width="60" height="60" viewBox="0 0 100 100" style="color: #6366f1;">
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 3" />
+                  <path d="M 30 50 L 45 65 L 70 35" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+              <div class="footer-line"></div>
+              <div class="footer-value">Harin Verification System</div>
+              <div class="footer-label">ID Terverifikasi</div>
+            </div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <div className="bg-surface text-on-surface font-body-md flex h-screen overflow-hidden">
       <Sidebar />
@@ -297,33 +591,16 @@ const Achievements = () => {
                   </div>
 
                   <div className="p-6 flex-1 flex flex-col">
-                    <h3 className="font-headline-md text-on-surface mb-1 line-clamp-2">
-                      {cert.courses?.title || 'Kursus'}
-                    </h3>
-                    <p className="text-xs font-bold text-on-surface-variant mb-1 uppercase">
-                      {cert.courses?.category}
-                    </p>
-                    <p className="font-body-sm text-on-surface-variant mb-6 flex-1">
-                      Diterbitkan: {formatDate(cert.issued_at)}
-                    </p>
-
-                    {cert.certificate_url ? (
-                      <button
-                        onClick={() => setSelectedCertForPreview(cert)}
-                        className="w-full bg-secondary text-on-secondary border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg py-3 font-black text-sm flex items-center justify-center gap-2 hover:bg-secondary-container hover:text-on-secondary-container transition-all"
-                      >
-                        <Icon name="visibility" className="w-5 h-5" />
-                        LIHAT SERTIFIKAT
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setSelectedCertForPreview(cert)}
-                        className="w-full bg-[#FFB800] hover:bg-[#e6a500] text-on-background border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg py-3 font-black text-sm flex items-center justify-center gap-2 hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all"
-                      >
-                        <Icon name="visibility" className="w-5 h-5" />
-                        LIHAT SERTIFIKAT
-                      </button>
-                    )}
+                    <h3 className="font-headline-md text-on-surface mb-1 line-clamp-2">{cert.courses?.title}</h3>
+                    <p className="text-xs font-bold text-on-surface-variant mb-4 uppercase">{cert.courses?.category}</p>
+                    <p className="font-body-sm text-on-surface-variant mb-6 flex-1">Lulus pada {formatDate(cert.enrolled_at)}</p>
+                    <button 
+                      onClick={() => handlePrintCertificate(cert)}
+                      className="bg-secondary text-on-secondary border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg py-3 font-black text-sm flex items-center justify-center gap-2 hover:bg-secondary-container hover:text-on-secondary-container transition-all"
+                    >
+                      <Icon name="download" className="w-5 h-5" />
+                      UNDUH PDF
+                    </button>
                   </div>
                 </div>
               ))

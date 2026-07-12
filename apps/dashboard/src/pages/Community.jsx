@@ -1629,7 +1629,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
 
   return (
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
-      {profile?.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
+      {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
       <main className={`flex-1 flex overflow-hidden ${profile?.role === 'teacher' ? 'lg:ml-[280px] pb-16 lg:pb-0' : ''}`}>
         

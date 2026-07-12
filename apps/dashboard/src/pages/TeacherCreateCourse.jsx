@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
@@ -38,43 +38,11 @@ const TeacherCreateCourse = () => {
     what_will_learn: ['']
   });
 
-  const [showDescModal, setShowDescModal] = useState(false);
-  const [tempDescription, setTempDescription] = useState('');
-
-  // Syllabus State
-  const [sections, setSections] = useState([]);
-  const [courseId, setCourseId] = useState(null);
-
-  const fetchCollaborators = async (cId) => {
-    try {
-      const { data, error } = await supabase
-        .from('course_collaborators')
-        .select('id, teacher_id, status, role')
-        .eq('course_id', cId);
-
-      if (error) throw error;
-      
-      let finalData = data || [];
-      if (finalData.length > 0) {
-        const teacherIds = finalData.map(c => c.teacher_id);
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .in('id', teacherIds);
-          
-        if (profileData) {
-          finalData = finalData.map(c => ({
-            ...c,
-            profiles: profileData.find(p => p.id === c.teacher_id)
-          }));
-        }
-      }
-      
-      setCollaborators(finalData);
-    } catch {
-      console.error('Error fetching collaborators');
-    }
-  };
+  // Signature Pad State
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureData, setSignatureData] = useState('');
+  const [isSignatureConfirmed, setIsSignatureConfirmed] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -86,7 +54,7 @@ const TeacherCreateCourse = () => {
       
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role, full_name')
+        .select('role, full_name, signature_url')
         .eq('id', session.user.id)
         .single();
 
@@ -95,86 +63,109 @@ const TeacherCreateCourse = () => {
         return;
       }
       setUser({ ...session.user, full_name: profile.full_name });
-      
-      // Fetch Categories
-      try {
-        const cats = await courseService.getCategories();
-        setCategories(cats);
-      } catch {
-        console.error('Error fetching categories');
-      }
 
-      // If Editing, Fetch Existing Data
-      if (editId) {
-        setLoading(true);
-        try {
-          const { data: courseData, error: cErr } = await supabase.from('courses').select('*').eq('id', editId).single();
-          if (cErr) throw cErr;
-          
-          setFormData({
-            title: courseData.title,
-            category: courseData.category,
-            price: courseData.price,
-            description: courseData.description,
-            level: courseData.level || 'beginner',
-            language: courseData.language || 'id',
-            image_url: courseData.image_url,
-            what_will_learn: Array.isArray(courseData.what_will_learn) 
-              ? courseData.what_will_learn 
-              : (courseData.what_will_learn ? JSON.parse(courseData.what_will_learn) : [''])
-          });
-          setCourseId(editId);
-          setCourseStatus(courseData.status || 'draft');
-          setIsOwner(courseData.instructor_id === session.user.id);
-          
-          const content = await courseService.getCourseContent(editId);
-          setSections(content);
-          
-          // Check if course should be auto-locked (has students)
-          const { count } = await supabase.from('enrollments').select('id', { count: 'exact', head: true }).eq('course_id', editId);
-          if (count > 0 && courseData.status !== 'locked') {
-            await supabase.from('courses').update({ status: 'locked' }).eq('id', editId);
-            setCourseStatus('locked');
+      // If user already has a signature, load it
+      if (profile.signature_url) {
+        setSignatureData(profile.signature_url);
+        setIsSignatureConfirmed(true);
+        setTimeout(() => {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = profile.signature_url;
           }
-          
-          // Also fetch collaborators
-          await fetchCollaborators(editId);
-          
-          setCurrentStep(2); // Jump to syllabus by default when editing
-        } catch {
-          showToast('Gagal memuat data kursus.', 'error');
-        } finally {
-          setLoading(false);
-        }
+        }, 300);
       }
     };
     checkUser();
   }, [navigate, editId]);
 
+  // Initialize Canvas events for Signature Drawing
   useEffect(() => {
-    const handleFocus = () => {
-      const updatedDesc = localStorage.getItem('temp_course_description');
-      if (updatedDesc !== null && updatedDesc !== formData.description) {
-        setFormData(prev => ({ ...prev, description: updatedDesc }));
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#1c1b1b';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const getPos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      if (e.touches && e.touches[0]) {
+        return {
+          x: e.touches[0].clientX - rect.left,
+          y: e.touches[0].clientY - rect.top
+        };
+      }
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    };
+
+    const startDrawing = (e) => {
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      setIsDrawing(true);
+    };
+
+    const draw = (e) => {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    };
+
+    const stopDrawing = () => {
+      if (isDrawing) {
+        ctx.closePath();
+        setIsDrawing(false);
+        setSignatureData(canvas.toDataURL());
       }
     };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [formData.description]);
 
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
 
-  const handleAddCategory = async () => {
-    if (!newCatName.trim()) return;
-    try {
-      const newCat = await courseService.addCategory(newCatName);
-      setCategories(prev => [...prev, newCat]);
-      setFormData(prev => ({ ...prev, category: newCat.name }));
-      setNewCatName('');
-      setShowAddCategory(false);
-      showToast('Kategori baru berhasil ditambahkan!');
-    } catch {
-      showToast('Gagal menambahkan kategori.', 'error');
-    }
+    canvas.addEventListener('touchstart', startDrawing, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
+    canvas.addEventListener('touchend', stopDrawing);
+
+    return () => {
+      canvas.removeEventListener('mousedown', startDrawing);
+      canvas.removeEventListener('mousemove', draw);
+      canvas.removeEventListener('mouseup', stopDrawing);
+      canvas.removeEventListener('mouseleave', stopDrawing);
+
+      canvas.removeEventListener('touchstart', startDrawing);
+      canvas.removeEventListener('touchmove', draw);
+      canvas.removeEventListener('touchend', stopDrawing);
+    };
+  }, [isDrawing]);
+
+  const handleClearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureData('');
+    setIsSignatureConfirmed(false);
+  };
+
+  const handleInputChange = (e) => {
+    const { id, value } = e.target;
+    const key = id.replace('course-', '');
+    setFormData(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSearchTeachers = async (query) => {
@@ -294,22 +285,44 @@ const TeacherCreateCourse = () => {
       return;
     }
 
+    if (!signatureData) {
+      showToast('Anda harus menandatangani di area Tanda Tangan Pengajar terlebih dahulu.', 'error');
+      return;
+    }
+
+    if (!isSignatureConfirmed) {
+      showToast('Mohon setujui pernyataan konfirmasi tanda tangan.', 'error');
+      return;
+    }
+
     setLoading(true);
     try {
-      const payload = {
-        title: formData.title,
-        category: formData.category,
-        price: parseFloat(formData.price),
-        description: formData.description,
-        instructor: user.full_name || 'Instructor',
-        instructor_id: user.id,
-        level: formData.level,
-        language: formData.language,
-        image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop',
-        status: courseId ? undefined : 'draft', // New courses always start as draft
-        what_will_learn: formData.what_will_learn
-      };
-      if (!courseId) delete payload.status; // Remove when updating
+      // 1. Save signature to teacher profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ signature_url: signatureData })
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.warn('Gagal menyimpan tanda tangan ke profiles (signature_url):', profileError.message);
+      }
+
+      // 2. Publish Course
+      const { error } = await supabase
+        .from('courses')
+        .insert([
+          {
+            title: formData.title,
+            category: formData.category,
+            price: parseFloat(formData.price),
+            description: formData.description,
+            instructor: user.full_name || 'Instructor',
+            instructor_id: user.id,
+            level: formData.level,
+            language: formData.language,
+            image_url: formData.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&auto=format&fit=crop'
+          }
+        ]);
 
       if (courseId) {
         // Update existing course
@@ -1484,13 +1497,15 @@ const TeacherCreateCourse = () => {
           </div>
         )}
 
-        {/* New Section Modal */}
-        {sectionModalOpen && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-on-surface/50 backdrop-blur-sm">
-            <div className="bg-white border-4 border-on-surface rounded-[40px] shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-10 flex flex-col gap-8 animate-in zoom-in-95 duration-200">
-              <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-black">New Section</h2>
-                <button onClick={() => setSectionModalOpen(false)} className="p-2 hover:rotate-90 transition-transform"><Icon name="close" className="w-8 h-8" /></button>
+          {/* Right Column: Media & Signature */}
+          <div className="col-span-1 lg:col-span-4 flex flex-col gap-10">
+            {/* Media Card */}
+            <section className="bg-white rounded-[40px] p-8 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-tertiary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
+                  <span className="material-symbols-outlined text-on-tertiary-container font-black">perm_media</span>
+                </div>
+                <h2 className="text-xl font-black text-on-surface">Media Kursus</h2>
               </div>
               
               <div className="space-y-4">
@@ -1871,7 +1886,60 @@ const TeacherCreateCourse = () => {
                   </button>
                 </div>
               </div>
-            </div>
+            </section>
+
+            {/* Signature Card */}
+            <section className="bg-white rounded-[40px] p-8 border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-primary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
+                  <span className="material-symbols-outlined text-on-primary-container font-black">draw</span>
+                </div>
+                <h2 className="text-xl font-black text-on-surface">Tanda Tangan</h2>
+              </div>
+
+              <p className="text-xs text-on-surface-variant font-bold mb-4">Gambarkan tanda tangan Anda di bawah untuk sertifikat kelulusan siswa.</p>
+
+              <div className="relative w-full aspect-[2/1] rounded-2xl border-4 border-on-surface bg-surface-container-lowest overflow-hidden mb-4">
+                <canvas 
+                  ref={canvasRef} 
+                  width={350} 
+                  height={175} 
+                  className="w-full h-full cursor-crosshair touch-none"
+                />
+                {!signatureData && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40 select-none">
+                    <p className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Tanda tangan di sini</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center mb-6">
+                <button
+                  type="button"
+                  onClick={handleClearSignature}
+                  className="px-4 py-2 rounded-xl border-2 border-on-surface font-black text-xs text-on-surface hover:bg-surface-variant transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none"
+                >
+                  Hapus Pad
+                </button>
+                {signatureData && (
+                  <span className="text-[10px] font-black text-green-600 uppercase flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm font-black">check_circle</span> Tanda Tangan OK
+                  </span>
+                )}
+              </div>
+
+              <label className="flex gap-3 items-start cursor-pointer group">
+                <input 
+                  type="checkbox"
+                  checked={isSignatureConfirmed}
+                  onChange={(e) => setIsSignatureConfirmed(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-2 border-on-surface text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer"
+                />
+                <span className="text-[11px] font-bold text-on-surface-variant group-hover:text-on-surface transition-colors leading-tight">
+                  Saya menyatakan bahwa tanda tangan ini sah untuk ditampilkan pada sertifikat kelulusan siswa Harin Academy.
+                </span>
+              </label>
+            </section>
           </div>
         )}
       </main>

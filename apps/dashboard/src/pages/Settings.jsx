@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import Sidebar from '../components/Sidebar';
+import TeacherSidebar from '../components/TeacherSidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
 import Icon from '../components/Icon';
 import { useUserProfile } from '../context/UserProfileContext';
@@ -407,7 +408,7 @@ const Settings = () => {
     <div className="bg-background text-on-background font-body-md h-screen overflow-hidden">
       <ToastBanner msg={toast.msg} type={toast.type} />
       <div className="flex h-screen overflow-hidden">
-        <Sidebar />
+        {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
         <main className="flex-1 flex flex-col h-full overflow-y-auto">
           {/* TopAppBar — original style */}
@@ -705,11 +706,13 @@ const Settings = () => {
       </div>
 
       {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-        <NavLink to="/" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard" className="w-6 h-6" /></NavLink>
-        <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book" className="w-6 h-6" /></NavLink>
-        <NavLink to="/settings" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="settings" className="w-6 h-6" /></NavLink>
-      </nav>
+      {profile.role !== 'teacher' && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
+          <NavLink to="/" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard" className="w-6 h-6" /></NavLink>
+          <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book" className="w-6 h-6" /></NavLink>
+          <NavLink to="/settings" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="settings" className="w-6 h-6" /></NavLink>
+        </nav>
+      )}
     </div>
   );
 };
