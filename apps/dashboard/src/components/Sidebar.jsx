@@ -405,6 +405,20 @@ const Sidebar = () => {
                 </button>
                 <div className="space-y-1">
                   <button
+                    onClick={() => { navigate('/profile'); setIsMobileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-surface-container-high transition-all text-left cursor-pointer"
+                  >
+                    <Icon name="account_circle" className="w-6 h-6 shrink-0" />
+                    <span className="font-label-bold">Profile</span>
+                  </button>
+                  <button
+                    onClick={() => { navigate('/settings'); setIsMobileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-surface-container-high transition-all text-left cursor-pointer"
+                  >
+                    <Icon name="settings" className="w-6 h-6 shrink-0" />
+                    <span className="font-label-bold">Settings</span>
+                  </button>
+                  <button
                     onClick={() => { navigate('/help'); setIsMobileMenuOpen(false); }}
                     className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-surface-container-high transition-all text-left cursor-pointer"
                   >

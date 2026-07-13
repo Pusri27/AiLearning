@@ -83,7 +83,7 @@ const MyCourses = () => {
       <div className="flex flex-col flex-grow overflow-hidden">
         {/* TopAppBar */}
         <header className="bg-surface flex justify-between items-center w-full px-6 md:px-margin-desktop h-16 sticky top-0 z-[50] border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
-          <h1 className="font-headline-md font-extrabold text-primary hidden md:block">Kursus Saya</h1>
+          <h1 className="font-headline-md font-extrabold text-primary">Kursus Saya</h1>
           <div className="hidden md:flex items-center flex-grow max-w-sm mx-6">
             <div className="flex w-full bg-white border-2 border-on-surface rounded-lg items-center px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <Icon name="search" className="w-4 h-4 text-on-surface-variant shrink-0" />
