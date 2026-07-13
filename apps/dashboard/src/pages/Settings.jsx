@@ -399,8 +399,7 @@ const Settings = () => {
         {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
         <main className="flex-1 flex flex-col h-full overflow-y-auto">
-          {/* TopAppBar — original style */}
-          <header className="flex justify-between items-center px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
+          <header className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <h2 className="font-headline-md text-headline-md font-extrabold text-on-surface">Settings</h2>
             </div>
@@ -656,15 +655,6 @@ const Settings = () => {
           </div>
         </main>
       </div>
-
-      {/* Mobile Navigation */}
-      {profile.role !== 'teacher' && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-          <NavLink to="/" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard" className="w-6 h-6" /></NavLink>
-          <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book" className="w-6 h-6" /></NavLink>
-          <NavLink to="/settings" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="settings" className="w-6 h-6" /></NavLink>
-        </nav>
-      )}
     </div>
   );
 };
