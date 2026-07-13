@@ -40,3 +40,12 @@
   from { transform: scaleY(0.4); }
   to   { transform: scaleY(1); }
 }
+
+@media (max-width: 767px) {
+  aside + div main,
+  aside + div div.overflow-y-auto,
+  aside + .overflow-y-auto {
+    padding-bottom: 6.5rem !important;
+  }
+}
+
