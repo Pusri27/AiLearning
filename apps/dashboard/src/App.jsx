@@ -35,6 +35,7 @@ import AIAssistant from './components/AIAssistant';
 import { MusicPlayerProvider } from './context/MusicPlayerContext';
 import PersistentMusicPlayer from './components/PersistentMusicPlayer';
 import { useUserProfile } from './context/UserProfileContext';
+import { Analytics } from '@vercel/analytics/react';
 
 const AIAssistantWrapper = ({ session, isGuest, profile }) => {
   const location = useLocation();
@@ -151,6 +152,7 @@ function App() {
       <Router>
         <AppContent />
       </Router>
+      <Analytics />
     </MusicPlayerProvider>
   );
 }
