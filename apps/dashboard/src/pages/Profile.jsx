@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
+import TeacherSidebar from '../components/TeacherSidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 import { useUserProfile } from '../context/UserProfileContext';
 import { checkAchievements } from '../lib/achievementService';
-import TeacherSidebar from '../components/TeacherSidebar';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -30,106 +30,68 @@ const Profile = () => {
   useEffect(() => {
     const fetchData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) { navigate('/login'); return; }
 
       // Cek lencana baru
       await checkAchievements(session.user.id);
 
       const uid = session.user.id;
 
-      if (profile.role === 'teacher') {
-        // --- Teacher Logic ---
-        const [coursesRes, enrollsRes, postsRes] = await Promise.all([
-          supabase.from('courses').select('*').eq('instructor_id', uid).order('created_at', { ascending: false }),
-          supabase.from('enrollments').select('course_id, enrolled_at, courses!inner(instructor_id)'),
-          supabase.from('posts').select('id, title, category, created_at').eq('author_id', uid).order('created_at', { ascending: false }).limit(5)
-        ]);
+      // Parallel fetches
+      const [enrollRes, postsRes, achRes] = await Promise.all([
+        supabase
+          .from('enrollments')
+          .select('id, progress, course_id, courses(title, image_url, category)')
+          .eq('user_id', uid)
+          .order('enrolled_at', { ascending: false }),
+        supabase
+          .from('posts')
+          .select('id, title, category, created_at')
+          .eq('author_id', uid)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('user_achievements')
+          .select('achievement_id, achievements(*)')
+          .eq('user_id', uid)
+      ]);
 
-        const myCourses = coursesRes.data || [];
-        const myEnrolls = (enrollsRes.data || []).filter(e => e.courses?.instructor_id === uid);
-        const posts = postsRes.data || [];
+      const enrollments = enrollRes.data || [];
+      const posts       = postsRes.data  || [];
+      let userAchs      = achRes.data?.map(a => a.achievements) || [];
 
-        setEnrolledCourses(myCourses); // reuse state variable for my published courses
-        setRecentPosts(posts);
-        setStats({
-          enrolledCount: myCourses.length,        // courses published
-          completedCount: myEnrolls.length,       // total students
-          postsCount: posts.length,               // posts written
-        });
-        setLoading(false);
-
-      } else {
-        // --- Student Logic ---
-        const [enrollRes, postsRes, achRes, progressRes] = await Promise.all([
-          supabase
-            .from('enrollments')
-            .select('id, course_id, courses(title, image_url, category, course_syllabus(id))')
-            .eq('user_id', uid)
-            .order('enrolled_at', { ascending: false }),
-          supabase
-            .from('posts')
-            .select('id, title, category, created_at')
-            .eq('author_id', uid)
-            .order('created_at', { ascending: false })
-            .limit(5),
-          supabase
-            .from('user_achievements')
-            .select('achievement_id, achievements(*)')
-            .eq('user_id', uid),
-          supabase
-            .from('user_progress')
-            .select('course_id, syllabus_id')
-            .eq('user_id', uid)
-        ]);
-
-        const rawEnrollments = enrollRes.data || [];
-        const userProgress   = progressRes.data || [];
-        const posts          = postsRes.data  || [];
-        let userAchs         = achRes.data?.map(a => a.achievements) || [];
-
-        const enrollments = rawEnrollments.map(e => {
-          const course = Array.isArray(e.courses) ? e.courses[0] : e.courses;
-          const total  = course?.course_syllabus?.length || 0;
-          const done   = userProgress.filter(p => p.course_id === e.course_id).length;
-          const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-          return { ...e, progress };
-        });
-
-        if (userAchs.length === 0) {
-          const { data: pioneerAch } = await supabase.from('achievements').select('*').eq('id', 'pioneer').single();
-          if (pioneerAch) {
-            await supabase.from('user_achievements').insert({ user_id: uid, achievement_id: 'pioneer' });
-            userAchs = [pioneerAch];
-          }
+      // Logic: Auto-award Pioneer badge if empty
+      if (userAchs.length === 0) {
+        const { data: pioneerAch } = await supabase.from('achievements').select('*').eq('id', 'pioneer').single();
+        if (pioneerAch) {
+          await supabase.from('user_achievements').insert({ user_id: uid, achievement_id: 'pioneer' });
+          userAchs = [pioneerAch];
         }
-
-        setEnrolledCourses(enrollments);
-        setRecentPosts(posts);
-        setAchievements(userAchs);
-        setStats({
-          enrolledCount:  enrollments.length,
-          completedCount: enrollments.filter(e => e.progress >= 100).length,
-          postsCount:     posts.length,
-        });
-        setLoading(false);
       }
+
+      setEnrolledCourses(enrollments);
+      setRecentPosts(posts);
+      setAchievements(userAchs);
+      setStats({
+        enrolledCount:  enrollments.length,
+        completedCount: enrollments.filter(e => e.progress >= 100).length,
+        postsCount:     posts.length,
+      });
+      setLoading(false);
     };
-    if (profile.role !== undefined) fetchData();
-  }, [navigate, profile.role]);
+    fetchData();
+  }, [navigate]);
 
   const formatDate = (d) =>
     new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <div className="flex h-screen overflow-hidden bg-background font-body-md text-on-background">
-      {profile.role === 'teacher' ? <TeacherSidebar /> : <Sidebar />}
-      <div className={`flex-1 flex flex-col overflow-y-auto ${profile.role === 'teacher' ? 'lg:ml-[280px]' : ''}`}>
+      {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
+      <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Header */}
         <header className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
-          <h1 className="font-headline-md text-headline-md font-extrabold text-on-surface hidden md:block">Profil Saya</h1>
-          <div className="md:hidden">
-            <span className="font-headline-md text-headline-md font-extrabold text-on-surface">Harin</span>
-          </div>
+          <h1 className="font-headline-md text-headline-md font-extrabold text-on-surface">Profil Saya</h1>
           <div className="flex items-center gap-4">
             <NotificationDropdown />
             <ProfileDropdown />
@@ -193,36 +155,31 @@ const Profile = () => {
             </div>
 
             {/* Stat cards */}
-            <div className={`lg:col-span-4 grid grid-cols-1 gap-gutter ${profile.role === 'teacher' ? '' : 'sm:grid-cols-2 lg:grid-cols-1'}`}>
+            <div className="lg:col-span-4 grid grid-cols-1 gap-gutter">
               <div className="bg-primary-container border-2 border-on-surface p-gutter shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-center items-center text-center">
-                <Icon name={profile.role === 'teacher' ? 'school' : 'auto_stories'} className="w-10 h-10 mb-2" />
+                <Icon name="auto_stories" className="w-10 h-10 mb-2" />
                 {loading ? <div className="w-12 h-8 bg-on-surface/10 animate-pulse rounded" /> : (
                   <p className="font-headline-lg text-headline-lg">{stats.enrolledCount}</p>
                 )}
-                <p className="font-label-bold text-label-bold uppercase">{profile.role === 'teacher' ? 'Kursus Diajar' : 'Kursus Diambil'}</p>
+                <p className="font-label-bold text-label-bold uppercase">Kursus Diambil</p>
               </div>
-              {profile.role !== 'teacher' && (
-                <div className="bg-secondary-container border-2 border-on-surface p-gutter shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-center items-center text-center">
-                  <Icon name="article" className="w-10 h-10 mb-2" />
-                  {loading ? <div className="w-12 h-8 bg-on-surface/10 animate-pulse rounded" /> : (
-                    <p className="font-headline-lg text-headline-lg">{stats.postsCount}</p>
-                  )}
-                  <p className="font-label-bold text-label-bold uppercase">Post Ditulis</p>
-                </div>
-              )}
+              <div className="bg-secondary-container border-2 border-on-surface p-gutter shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-center items-center text-center">
+                <Icon name="article" className="w-10 h-10 mb-2" />
+                {loading ? <div className="w-12 h-8 bg-on-surface/10 animate-pulse rounded" /> : (
+                  <p className="font-headline-lg text-headline-lg">{stats.postsCount}</p>
+                )}
+                <p className="font-label-bold text-label-bold uppercase">Post Ditulis</p>
+              </div>
             </div>
           </div>
 
           {/* ── Stat chips ────────────────────────────────────── */}
-          <div className={`grid grid-cols-1 gap-gutter ${profile.role === 'teacher' ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
-            {(profile.role === 'teacher' ? [
-              { icon: 'groups',            color: 'bg-tertiary-container', label: 'Total Siswa',  value: stats.completedCount },
-              { icon: 'school',            color: 'bg-primary-fixed',      label: 'Kursus Aktif', value: stats.enrolledCount },
-            ] : [
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+            {[
               { icon: 'workspace_premium', color: 'bg-tertiary-container', label: 'Kursus Selesai', value: stats.completedCount },
               { icon: 'auto_stories',      color: 'bg-primary-fixed',      label: 'Kursus Aktif',   value: stats.enrolledCount - stats.completedCount },
               { icon: 'edit_note',         color: 'bg-secondary-fixed',    label: 'Blog Ditulis',   value: stats.postsCount },
-            ]).map((item, i) => (
+            ].map((item, i) => (
               <div key={i} className="bg-surface-container-lowest border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4">
                 <div className={`${item.color} border-2 border-on-surface p-3 rounded-lg`}>
                   <Icon name={item.icon} className="w-6 h-6 text-on-surface" />
@@ -239,13 +196,13 @@ const Profile = () => {
           </div>
 
           {/* ── My Courses + Recent Posts ─────────────────────── */}
-          <div className={`grid grid-cols-1 gap-gutter pb-10 ${profile.role === 'teacher' ? '' : 'lg:grid-cols-2'}`}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter pb-10">
 
-            {/* Enrolled/Taught Courses */}
+            {/* Enrolled Courses */}
             <div className="bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
               <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
-                <h2 className="font-headline-md text-headline-md">{profile.role === 'teacher' ? 'Kursus yang Saya Ajar' : 'Kursus Saya'}</h2>
-                <button onClick={() => navigate(profile.role === 'teacher' ? '/teacher/courses' : '/courses')} className="text-xs font-black text-primary hover:underline">
+                <h2 className="font-headline-md text-headline-md">Kursus Saya</h2>
+                <button onClick={() => navigate('/courses')} className="text-xs font-black text-primary hover:underline">
                   Lihat Semua →
                 </button>
               </div>
@@ -256,96 +213,83 @@ const Profile = () => {
               ) : enrolledCourses.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-10 text-center gap-3">
                   <Icon name="school" className="w-12 h-12 text-on-surface-variant opacity-30" />
-                  <p className="font-bold text-on-surface-variant">{profile.role === 'teacher' ? 'Kamu belum membuat kursus.' : 'Kamu belum mengambil kursus.'}</p>
-                  <button onClick={() => navigate(profile.role === 'teacher' ? '/teacher/courses/create' : '/catalog')} className="px-4 py-2 bg-primary text-on-primary border-2 border-on-surface font-label-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
-                    {profile.role === 'teacher' ? 'Buat Kursus' : 'Jelajahi Katalog'}
+                  <p className="font-bold text-on-surface-variant">Kamu belum mengambil kursus.</p>
+                  <button onClick={() => navigate('/catalog')} className="px-4 py-2 bg-primary text-on-primary border-2 border-on-surface font-label-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                    Jelajahi Katalog
                   </button>
                 </div>
               ) : (
                 <div className="flex-1 divide-y-2 divide-on-surface/20">
-                  {enrolledCourses.slice(0, 5).map((e, idx) => {
-                    const courseItem = profile.role === 'teacher' ? e : e.courses;
-                    return (
+                  {enrolledCourses.slice(0, 5).map((e, idx) => (
                     <div key={idx} className="p-4 flex items-center gap-4 hover:bg-surface-container transition-colors">
                       <div className="w-12 h-12 shrink-0 border-2 border-on-surface bg-primary-container overflow-hidden">
-                        {courseItem?.image_url
-                          ? <img src={courseItem.image_url} alt={courseItem.title} className="w-full h-full object-cover" />
+                        {e.courses?.image_url
+                          ? <img src={e.courses.image_url} alt={e.courses.title} className="w-full h-full object-cover" />
                           : <div className="w-full h-full bg-primary-container flex items-center justify-center"><Icon name="school" className="w-6 h-6 text-on-primary-container" /></div>
                         }
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-label-bold text-sm line-clamp-1">{courseItem?.title}</p>
-                        <p className="text-xs text-on-surface-variant">{courseItem?.category}</p>
-                        {/* Progress bar (only for students) */}
-                        {profile.role !== 'teacher' && (
-                          <div className="mt-1.5 h-1.5 bg-surface-container border border-on-surface/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-primary transition-all" style={{ width: `${e.progress || 0}%` }} />
-                          </div>
-                        )}
+                        <p className="font-label-bold text-sm line-clamp-1">{e.courses?.title}</p>
+                        <p className="text-xs text-on-surface-variant">{e.courses?.category}</p>
+                        {/* Progress bar */}
+                        <div className="mt-1.5 h-1.5 bg-surface-container border border-on-surface/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${e.progress || 0}%` }} />
+                        </div>
                       </div>
-                      {profile.role !== 'teacher' && (
-                        <span className="shrink-0 text-xs font-black text-on-surface-variant">{e.progress || 0}%</span>
-                      )}
+                      <span className="shrink-0 text-xs font-black text-on-surface-variant">{e.progress || 0}%</span>
                     </div>
-                  )})}
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Recent Blog Posts (Hidden for Teachers) */}
-            {profile.role !== 'teacher' && (
-              <div className="bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
-                <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
-                  <h2 className="font-headline-md text-headline-md">Blog yang Saya Buat</h2>
-                  <button onClick={() => navigate('/write')} className="text-xs font-black text-primary hover:underline">
-                    Tulis Post →
+            {/* Recent Blog Posts */}
+            <div className="bg-surface-container-lowest border-2 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col">
+              <div className="p-6 border-b-2 border-on-surface flex justify-between items-center bg-surface-container-low">
+                <h2 className="font-headline-md text-headline-md">Blog yang Saya Buat</h2>
+                <button onClick={() => navigate('/write')} className="text-xs font-black text-primary hover:underline">
+                  Tulis Post →
+                </button>
+              </div>
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-14 bg-on-surface/5 animate-pulse rounded" />)}
+                </div>
+              ) : recentPosts.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-10 text-center gap-3">
+                  <Icon name="edit_note" className="w-12 h-12 text-on-surface-variant opacity-30" />
+                  <p className="font-bold text-on-surface-variant">Kamu belum menulis post.</p>
+                  <button onClick={() => navigate('/write')} className="px-4 py-2 bg-secondary text-on-secondary border-2 border-on-surface font-label-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+                    Tulis Sekarang
                   </button>
                 </div>
-                {loading ? (
-                  <div className="p-6 space-y-3">
-                    {[1,2,3].map(i => <div key={i} className="h-14 bg-on-surface/5 animate-pulse rounded" />)}
-                  </div>
-                ) : recentPosts.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-10 text-center gap-3">
-                    <Icon name="edit_note" className="w-12 h-12 text-on-surface-variant opacity-30" />
-                    <p className="font-bold text-on-surface-variant">Kamu belum menulis post.</p>
-                    <button onClick={() => navigate('/write')} className="px-4 py-2 bg-secondary text-on-secondary border-2 border-on-surface font-label-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
-                      Tulis Sekarang
+              ) : (
+                <div className="flex-1 divide-y-2 divide-on-surface/20">
+                  {recentPosts.map((post, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => navigate(`/blog/${post.id}`)}
+                      className="w-full p-4 flex items-start gap-4 hover:bg-surface-container transition-colors text-left"
+                    >
+                      <div className="mt-1 w-8 h-8 shrink-0 bg-primary-container border-2 border-on-surface flex items-center justify-center">
+                        <Icon name="article" className="w-4 h-4 text-on-primary-container" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-label-bold text-sm line-clamp-2">{post.title}</p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">
+                          {post.category && <span className="font-bold mr-2">{post.category}</span>}
+                          {formatDate(post.created_at)}
+                        </p>
+                      </div>
                     </button>
-                  </div>
-                ) : (
-                  <div className="flex-1 divide-y-2 divide-on-surface/20">
-                    {recentPosts.map((post, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => navigate(`/blog/${post.id}`)}
-                        className="w-full p-4 flex items-start gap-4 hover:bg-surface-container transition-colors text-left"
-                      >
-                        <div className="w-10 h-10 shrink-0 border-2 border-on-surface bg-secondary-container flex items-center justify-center">
-                          <Icon name="article" className="w-5 h-5 text-on-secondary-container" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-label-bold text-sm line-clamp-1">{post.title}</p>
-                          <p className="text-xs text-on-surface-variant mt-0.5">{post.category || 'Uncategorized'} • {formatDate(post.created_at)}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
         </main>
       </div>
-
-      {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-        <NavLink to={profile.role === 'teacher' ? '/teacher/dashboard' : '/'}        className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard"       className="w-6 h-6" /></NavLink>
-        <NavLink to={profile.role === 'teacher' ? '/teacher/courses' : '/catalog'} className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book"       className="w-6 h-6" /></NavLink>
-        <NavLink to="/profile" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="account_circle" className="w-6 h-6" /></NavLink>
-        <NavLink to={profile.role === 'teacher' ? '/teacher/settings' : '/settings'}className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="settings"        className="w-6 h-6" /></NavLink>
-      </nav>
     </div>
   );
 };

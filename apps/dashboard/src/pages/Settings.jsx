@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import Sidebar from '../components/Sidebar';
+import TeacherSidebar from '../components/TeacherSidebar';
 import ProfileDropdown from '../components/ProfileDropdown';
 import Icon from '../components/Icon';
 import { useUserProfile } from '../context/UserProfileContext';
-import { getTranslation } from '../lib/i18n';
 
 // ── Friendly error mapper (local) ────────────────────────────────
 const friendlyError = (err) => {
@@ -69,10 +69,7 @@ const PaymentMethodsManager = ({ showToast }) => {
 
   const handleAddManual = async (e) => {
     e.preventDefault();
-    if (!newMethod.accountNumber.trim()) {
-      showToast('Nomor rekening/kartu/handphone tidak boleh kosong!', 'error');
-      return;
-    }
+    if (!newMethod.accountNumber.trim()) return;
     
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -275,7 +272,6 @@ const PaymentMethodsManager = ({ showToast }) => {
 const Settings = () => {
   const navigate   = useNavigate();
   const { profile, updateProfile } = useUserProfile();
-  const t = (key) => getTranslation(profile.language || 'id', key);
 
   // ── Form state (pre-filled from context) ─────────────────────
   const [user,         setUser]         = useState(null);
@@ -285,10 +281,7 @@ const Settings = () => {
   const [newPw,        setNewPw]        = useState('');
   const [confirmPw,    setConfirmPw]    = useState('');
   const [showPw,       setShowPw]       = useState(false);
-  const [dailyGoal,    setDailyGoal]    = useState(() => {
-    const saved = localStorage.getItem('harin_daily_study_goal');
-    return saved ? Number(saved) : 45;
-  });
+  const [dailyGoal,    setDailyGoal]    = useState(45);
   const [notifEmail,   setNotifEmail]   = useState(true);
   const [notifPush,    setNotifPush]    = useState(false);
   const [savingProf,   setSavingProf]   = useState(false);
@@ -306,14 +299,10 @@ const Settings = () => {
 
   // ── Load session ──────────────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user }, error }) => {
-      if (error || !user) {
-        supabase.auth.signOut();
-        navigate('/login');
-        return;
-      }
-      setUser(user);
-      setEmail(user.email || '');
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { navigate('/login'); return; }
+      setUser(session.user);
+      setEmail(session.user.email || '');
     });
   }, [navigate]);
 
@@ -407,11 +396,10 @@ const Settings = () => {
     <div className="bg-background text-on-background font-body-md h-screen overflow-hidden">
       <ToastBanner msg={toast.msg} type={toast.type} />
       <div className="flex h-screen overflow-hidden">
-        <Sidebar />
+        {profile.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
         <main className="flex-1 flex flex-col h-full overflow-y-auto">
-          {/* TopAppBar — original style */}
-          <header className="flex justify-between items-center px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
+          <header className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
             <div className="flex items-center gap-4">
               <h2 className="font-headline-md text-headline-md font-extrabold text-on-surface">Settings</h2>
             </div>
@@ -514,71 +502,35 @@ const Settings = () => {
             {/* ── Preferences Section ───────────────────────────── */}
             <section className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
               <div className="md:col-span-1">
-                <h3 className="font-headline-lg text-headline-lg text-on-surface">
-                  {profile.language === 'en' ? 'Study Preferences' : profile.language === 'ja' ? '学習設定' : profile.language === 'zh' ? '学习设置' : 'Preferensi Belajar'}
-                </h3>
-                <p className="font-body-md text-body-md text-on-surface-variant mt-2">
-                  {profile.language === 'en' ? 'Tailor your learning experience for better efficiency.' : profile.language === 'ja' ? '学習体験を最適化するためにカスタマイズします。' : profile.language === 'zh' ? '个性化您的学习体验以达到最佳效果。' : 'Sesuaikan pengalaman belajar Anda agar lebih optimal.'}
-                </p>
+                <h3 className="font-headline-lg text-headline-lg text-on-surface">Preferensi Belajar</h3>
+                <p className="font-body-md text-body-md text-on-surface-variant mt-2">Sesuaikan pengalaman belajar Anda agar lebih optimal.</p>
               </div>
               <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="bg-surface-container border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
                   <div>
                     <Icon name="schedule" className="w-10 h-10 text-secondary mb-4" />
-                    <h4 className="font-label-bold text-label-bold uppercase mb-2">{t('dailyGoal')}</h4>
-                    <p className="text-body-md text-on-surface-variant">{t('dailyGoalDesc')}</p>
+                    <h4 className="font-label-bold text-label-bold uppercase mb-2">Target Harian</h4>
+                    <p className="text-body-md text-on-surface-variant">Setel durasi waktu belajar minimum setiap hari.</p>
                   </div>
                   <div className="mt-6 flex items-center justify-between bg-white border-2 border-on-surface p-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <span className="font-bold px-2">
-                      {dailyGoal} {profile.language === 'en' ? 'Minutes' : profile.language === 'ja' ? '分' : profile.language === 'zh' ? '分钟' : 'Menit'}
-                    </span>
+                    <span className="font-bold px-2">{dailyGoal} Menit</span>
                     <div className="flex gap-1">
-                      <button onClick={() => setDailyGoal(g => {
-                        const newGoal = Math.max(5, g - 5);
-                        localStorage.setItem('harin_daily_study_goal', String(newGoal));
-                        return newGoal;
-                      })} className="w-8 h-8 bg-surface-variant border border-on-surface flex items-center justify-center font-black hover:bg-surface-container transition-colors">−</button>
-                      <button onClick={() => setDailyGoal(g => {
-                        const newGoal = Math.min(480, g + 5);
-                        localStorage.setItem('harin_daily_study_goal', String(newGoal));
-                        return newGoal;
-                      })} className="w-8 h-8 bg-surface-variant border border-on-surface flex items-center justify-center font-black hover:bg-surface-container transition-colors">+</button>
+                      <button onClick={() => setDailyGoal(g => Math.max(5, g - 5))} className="w-8 h-8 bg-surface-variant border border-on-surface flex items-center justify-center font-black hover:bg-surface-container transition-colors">−</button>
+                      <button onClick={() => setDailyGoal(g => Math.min(480, g + 5))} className="w-8 h-8 bg-surface-variant border border-on-surface flex items-center justify-center font-black hover:bg-surface-container transition-colors">+</button>
                     </div>
                   </div>
                 </div>
                 <div className="bg-surface-container border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
                   <div>
                     <Icon name="forum" className="w-10 h-10 text-tertiary mb-4" />
-                    <h4 className="font-label-bold text-label-bold uppercase mb-2">{t('contentLanguage')}</h4>
-                    <p className="text-body-md text-on-surface-variant">{t('contentLanguageDesc')}</p>
+                    <h4 className="font-label-bold text-label-bold uppercase mb-2">Bahasa Konten</h4>
+                    <p className="text-body-md text-on-surface-variant">Pilih bahasa utama untuk materi pelajaran.</p>
                   </div>
                   <div className="mt-6">
-                    <select 
-                      value={profile.language || 'id'}
-                      onChange={(e) => {
-                        const newLang = e.target.value;
-                        updateProfile({ language: newLang });
-                        const langMap = {
-                          id: 'Bahasa Indonesia',
-                          en: 'English (US)',
-                          ja: '日本語',
-                          zh: '中文 (简体)'
-                        };
-                        const toastMsg = newLang === 'en'
-                          ? `Content language successfully updated to ${langMap[newLang]}! ✓`
-                          : newLang === 'ja'
-                          ? `コンテンツ言語が${langMap[newLang]}に更新されました。 ✓`
-                          : newLang === 'zh'
-                          ? `内容语言已成功更新为${langMap[newLang]}！ ✓`
-                          : `Bahasa konten berhasil diperbarui ke ${langMap[newLang]}! ✓`;
-                        showToast(toastMsg);
-                      }}
-                      className="w-full bg-white border-2 border-on-surface px-3 py-2 font-body-md focus:ring-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
-                    >
-                      <option value="id">Bahasa Indonesia</option>
-                      <option value="en">English (US)</option>
-                      <option value="ja">日本語</option>
-                      <option value="zh">中文 (简体)</option>
+                    <select className="w-full bg-white border-2 border-on-surface px-3 py-2 font-body-md focus:ring-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <option>Bahasa Indonesia</option>
+                      <option>English (US)</option>
+                      <option>日本語</option>
                     </select>
                   </div>
                 </div>
@@ -703,13 +655,6 @@ const Settings = () => {
           </div>
         </main>
       </div>
-
-      {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-        <NavLink to="/" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard" className="w-6 h-6" /></NavLink>
-        <NavLink to="/catalog" className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book" className="w-6 h-6" /></NavLink>
-        <NavLink to="/settings" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="settings" className="w-6 h-6" /></NavLink>
-      </nav>
     </div>
   );
 };
