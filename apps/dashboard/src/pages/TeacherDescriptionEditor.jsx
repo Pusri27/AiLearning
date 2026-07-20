@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Icon from '../components/Icon';
-import { showToast } from '../lib/toast';
+import { showToast, showConfirm } from '../lib/toast';
 
 const TeacherDescriptionEditor = () => {
   const [description, setDescription] = useState('');
@@ -19,29 +19,157 @@ const TeacherDescriptionEditor = () => {
     }, 800);
   };
 
-  const handleCancel = () => {
-    if (window.confirm('Apakah Anda yakin ingin membatalkan perubahan? Halaman ini akan ditutup.')) {
+  const handleCancel = async () => {
+    if (await showConfirm('Apakah Anda yakin ingin membatalkan perubahan? Halaman ini akan ditutup.')) {
       window.close();
     }
   };
 
-  const insertTextAtCursor = (textToInsert) => {
+  const applyFormatting = (type) => {
     const textarea = document.getElementById('fullscreen-description');
     if (!textarea) return;
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
-    const before = text.substring(0, start);
-    const after = text.substring(end, text.length);
+    const selectedText = text.substring(start, end);
 
-    const newValue = before + textToInsert + after;
+    // Find the start index of the first line containing the selection
+    let lineStart = start;
+    while (lineStart > 0 && text[lineStart - 1] !== '\n') {
+      lineStart--;
+    }
+
+    // Find the end index of the last line containing the selection
+    let lineEnd = end;
+    while (lineEnd < text.length && text[lineEnd] !== '\n') {
+      lineEnd++;
+    }
+
+    const selectedLines = text.substring(lineStart, lineEnd);
+
+    if (type === 'bold' || type === 'italic') {
+      let textToInsert = '';
+      let selectionOffsetStart = 0;
+      let selectionOffsetEnd = 0;
+
+      if (type === 'bold') {
+        if (selectedText) {
+          textToInsert = `**${selectedText}**`;
+          selectionOffsetStart = 2;
+          selectionOffsetEnd = 2 + selectedText.length;
+        } else {
+          textToInsert = '**Teks Tebal**';
+          selectionOffsetStart = 2;
+          selectionOffsetEnd = 12;
+        }
+      } else {
+        if (selectedText) {
+          textToInsert = `*${selectedText}*`;
+          selectionOffsetStart = 1;
+          selectionOffsetEnd = 1 + selectedText.length;
+        } else {
+          textToInsert = '*Teks Miring*';
+          selectionOffsetStart = 1;
+          selectionOffsetEnd = 12;
+        }
+      }
+
+      const before = text.substring(0, start);
+      const after = text.substring(end);
+      const newValue = before + textToInsert + after;
+      setDescription(newValue);
+
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + selectionOffsetStart, start + selectionOffsetEnd);
+      }, 50);
+      return;
+    }
+
+    // Block-level or Line-based operations
+    let formatted = '';
+    
+    switch (type) {
+      case 'heading': {
+        const lines = selectedLines.split('\n');
+        formatted = lines.map(line => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('### ')) return line;
+          const leadingSpaces = line.match(/^(\s*)/)[1];
+          return `${leadingSpaces}### ${line.substring(leadingSpaces.length)}`;
+        }).join('\n');
+        break;
+      }
+
+      case 'bullet': {
+        const lines = selectedLines.split('\n');
+        formatted = lines.map(line => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('• ') || trimmed.startsWith('* ') || trimmed.startsWith('- ')) return line;
+          const leadingSpaces = line.match(/^(\s*)/)[1];
+          return `${leadingSpaces}• ${line.substring(leadingSpaces.length)}`;
+        }).join('\n');
+        break;
+      }
+
+      case 'numbered': {
+        const lines = selectedLines.split('\n');
+        let startNum = 1;
+        // Auto-increment only if single line and no text selection
+        if (lines.length === 1 && !selectedText) {
+          const linesBefore = text.substring(0, lineStart).split('\n');
+          for (let i = linesBefore.length - 2; i >= 0; i--) {
+            const match = linesBefore[i].trim().match(/^(\d+)[.)]/);
+            if (match) {
+              startNum = parseInt(match[1], 10) + 1;
+              break;
+            }
+            if (linesBefore[i].trim() === '' && i < linesBefore.length - 2) {
+              break;
+            }
+          }
+        }
+        
+        let count = startNum;
+        formatted = lines.map(line => {
+          const leadingSpaces = line.match(/^(\s*)/)[1];
+          const cleanContent = line.substring(leadingSpaces.length).replace(/^\d+[.)]\s*/, '');
+          const formattedLine = `${leadingSpaces}${count}. ${cleanContent}`;
+          count++;
+          return formattedLine;
+        }).join('\n');
+        break;
+      }
+
+      case 'indent': {
+        const lines = selectedLines.split('\n');
+        formatted = lines.map(line => `  ${line}`).join('\n');
+        break;
+      }
+
+      case 'outdent': {
+        const lines = selectedLines.split('\n');
+        formatted = lines.map(line => {
+          if (line.startsWith('  ')) return line.substring(2);
+          if (line.startsWith(' ')) return line.substring(1);
+          return line;
+        }).join('\n');
+        break;
+      }
+
+      default:
+        return;
+    }
+
+    const before = text.substring(0, lineStart);
+    const after = text.substring(lineEnd);
+    const newValue = before + formatted + after;
     setDescription(newValue);
 
-    // Restore focus and cursor position after update
     setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+      textarea.setSelectionRange(lineStart, lineStart + formatted.length);
     }, 50);
   };
 
@@ -154,18 +282,33 @@ const TeacherDescriptionEditor = () => {
     return (
       <div className="space-y-3 font-sans text-on-surface">
         {lines.map((line, idx) => {
+          const leadingSpacesMatch = line.match(/^(\s*)/);
+          const spaceCount = leadingSpacesMatch ? leadingSpacesMatch[1].length : 0;
+          const indentLevel = Math.floor(spaceCount / 2); // 2 spaces per indent level
+          
           let trimmed = line.trim();
           if (!trimmed) return <div key={idx} className="h-2" />;
+          
+          const indentStyle = { paddingLeft: `${indentLevel * 1.5 + 0.5}rem` };
+
           if (trimmed.startsWith('###')) {
-            return <h4 key={idx} className="text-base font-black text-on-surface mt-4 mb-2">{trimmed.replace('###', '').trim()}</h4>;
+            return (
+              <h4 key={idx} style={indentStyle} className="text-base font-black text-on-surface mt-4 mb-2">
+                {trimmed.replace('###', '').trim()}
+              </h4>
+            );
           }
           if (trimmed.startsWith('##')) {
-            return <h3 key={idx} className="text-lg font-black text-on-surface mt-4 mb-2">{trimmed.replace('##', '').trim()}</h3>;
-          }
-          if (trimmed.startsWith('•') || trimmed.startsWith('*') || trimmed.startsWith('-')) {
-            const cleanText = trimmed.replace(/^[•*\-]\s*/, '');
             return (
-              <div key={idx} className="flex gap-2 items-start pl-2">
+              <h3 key={idx} style={indentStyle} className="text-lg font-black text-on-surface mt-4 mb-2">
+                {trimmed.replace('##', '').trim()}
+              </h3>
+            );
+          }
+          if (trimmed.startsWith('•') || trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+            const cleanText = trimmed.replace(/^(•|\*\s+|\-\s+)/, '');
+            return (
+              <div key={idx} style={indentStyle} className="flex gap-2 items-start">
                 <span className="text-primary font-black mt-0.5">•</span>
                 <span className="flex-1 text-sm">{parsePreviewInline(cleanText)}</span>
               </div>
@@ -176,13 +319,17 @@ const TeacherDescriptionEditor = () => {
             const num = numMatch[1];
             const cleanText = numMatch[2];
             return (
-              <div key={idx} className="flex gap-2 items-start pl-2">
+              <div key={idx} style={indentStyle} className="flex gap-2 items-start">
                 <span className="text-primary font-black min-w-[16px] text-right">{num}.</span>
                 <span className="flex-1 text-sm">{parsePreviewInline(cleanText)}</span>
               </div>
             );
           }
-          return <p key={idx} className="leading-relaxed text-sm">{parsePreviewInline(trimmed)}</p>;
+          return (
+            <p key={idx} style={indentStyle} className="leading-relaxed text-sm">
+              {parsePreviewInline(trimmed)}
+            </p>
+          );
         })}
       </div>
     );
@@ -247,43 +394,60 @@ const TeacherDescriptionEditor = () => {
             <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant mr-2 pl-1 border-r border-on-surface/20 pr-3">Alat</span>
             <button
               type="button"
-              onClick={() => insertTextAtCursor('**Teks Tebal**')}
-              className="px-3 py-1.5 text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+              onClick={() => applyFormatting('bold')}
+              className="w-10 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
               title="Bold"
             >
               B
             </button>
             <button
               type="button"
-              onClick={() => insertTextAtCursor('*Teks Miring*')}
-              className="px-3 py-1.5 text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all italic"
+              onClick={() => applyFormatting('italic')}
+              className="w-10 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all italic"
               title="Italic"
             >
               I
             </button>
             <button
               type="button"
-              onClick={() => insertTextAtCursor('\n• ')}
-              className="px-3 py-1.5 text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+              onClick={() => applyFormatting('heading')}
+              className="px-3 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+              title="Heading 3"
+            >
+              H3
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('bullet')}
+              className="px-3 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all gap-1"
               title="Bullet List"
             >
               • Poin
             </button>
             <button
               type="button"
-              onClick={() => insertTextAtCursor('\n1. ')}
-              className="px-3 py-1.5 text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
+              onClick={() => applyFormatting('numbered')}
+              className="px-3 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all gap-1"
               title="Numbered List"
             >
               1. Poin
             </button>
+            <div className="h-6 w-0.5 bg-on-surface/20 mx-1"></div>
             <button
               type="button"
-              onClick={() => insertTextAtCursor('\n### Subjudul ')}
-              className="px-3 py-1.5 text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all"
-              title="Heading 3"
+              onClick={() => applyFormatting('indent')}
+              className="px-3 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all gap-1"
+              title="Geser Kanan (Indent)"
             >
-              H3
+              ➔ Indent
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('outdent')}
+              className="px-3 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none transition-all gap-1"
+              title="Geser Kiri (Outdent)"
+            >
+              ⬅ Outdent
             </button>
           </div>
 

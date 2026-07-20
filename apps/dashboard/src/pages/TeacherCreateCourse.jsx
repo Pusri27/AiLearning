@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
-import { showToast, friendlyError } from '../lib/toast';
+import { showToast, friendlyError, showConfirm } from '../lib/toast';
 import { BulbIcon } from '../components/Icons';
 import { courseService } from '../lib/courseService';
 
@@ -39,6 +39,8 @@ const TeacherCreateCourse = () => {
   });
 
   const [showDescModal, setShowDescModal] = useState(false);
+  const [descModalText, setDescModalText] = useState('');
+  const [descModalTab, setDescModalTab] = useState('write');
   const [tempDescription, setTempDescription] = useState('');
 
   // Syllabus State
@@ -242,7 +244,7 @@ const TeacherCreateCourse = () => {
   };
 
   const handleRemoveCollaborator = async (id, isPending = false) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus kolaborator ini?')) return;
+    if (!(await showConfirm('Apakah Anda yakin ingin menghapus kolaborator ini?'))) return;
     
     if (isPending) {
       setPendingInvites(prev => prev.filter(p => p.id !== id));
@@ -381,8 +383,9 @@ const TeacherCreateCourse = () => {
   };
 
   const handleOpenDescModal = () => {
-    localStorage.setItem('temp_course_description', formData.description || '');
-    window.open('/teacher/courses/description-editor', '_blank');
+    setDescModalText(formData.description || '');
+    setDescModalTab('write');
+    setShowDescModal(true);
   };
 
   const insertTextAtCursor = (textareaId, textToInsert) => {
@@ -502,6 +505,21 @@ const TeacherCreateCourse = () => {
     if (!courseId) { showToast('Simpan kursus terlebih dahulu.', 'error'); return; }
     setLoading(true);
     try {
+      // Validate that course has a final project
+      const { data: fpItems, error: fpErr } = await supabase
+        .from('course_syllabus')
+        .select('id')
+        .eq('course_id', courseId)
+        .eq('type', 'final_project')
+        .limit(1);
+
+      if (fpErr) throw fpErr;
+      if (!fpItems || fpItems.length === 0) {
+        showToast('Kursus tidak dapat dipublikasikan karena belum memiliki Final Project (Tugas Akhir).', 'error');
+        setLoading(false);
+        return;
+      }
+
       const { error } = await supabase.from('courses').update({ status: 'published' }).eq('id', courseId);
       if (error) throw error;
       setCourseStatus('published');
@@ -769,7 +787,7 @@ const TeacherCreateCourse = () => {
   const handleDeleteSyllabus = async () => {
     if (!editingSyllabus?.id) return;
     
-    if (!window.confirm('Apakah Anda yakin ingin menghapus materi ini?')) return;
+    if (!(await showConfirm('Apakah Anda yakin ingin menghapus materi ini?'))) return;
 
     try {
       const { error } = await supabase
@@ -786,6 +804,61 @@ const TeacherCreateCourse = () => {
     } catch (err) {
       console.error(err);
       showToast('Gagal menghapus materi', 'error');
+    }
+  };
+
+  const handleDeleteSection = async (sectionId) => {
+    if (!(await showConfirm('Apakah Anda yakin ingin menghapus section ini beserta seluruh materinya?'))) return;
+    
+    setLoading(true);
+    try {
+      // Delete all syllabus items in this section first (due to foreign key constraint)
+      const { error: sylErr } = await supabase
+        .from('course_syllabus')
+        .delete()
+        .eq('section_id', sectionId);
+        
+      if (sylErr) throw sylErr;
+      
+      // Delete the section
+      const { error: secErr } = await supabase
+        .from('course_sections')
+        .delete()
+        .eq('id', sectionId);
+        
+      if (secErr) throw secErr;
+      
+      showToast('Section berhasil dihapus');
+      const updatedSections = await courseService.getCourseContent(courseId);
+      setSections(updatedSections);
+    } catch (err) {
+      console.error(err);
+      showToast('Gagal menghapus section: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSyllabusDirectly = async (syllabusId) => {
+    if (!(await showConfirm('Apakah Anda yakin ingin menghapus materi/tugas ini?'))) return;
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('course_syllabus')
+        .delete()
+        .eq('id', syllabusId);
+        
+      if (error) throw error;
+      
+      showToast('Materi/Tugas berhasil dihapus');
+      const updatedSections = await courseService.getCourseContent(courseId);
+      setSections(updatedSections);
+    } catch (err) {
+      console.error(err);
+      showToast('Gagal menghapus materi/tugas', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -872,6 +945,201 @@ const TeacherCreateCourse = () => {
     }
   };
 
+  const applyFormattingInline = (type) => {
+    const textarea = document.getElementById('inline-description-textarea');
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+
+    let lineStart = start;
+    while (lineStart > 0 && text[lineStart - 1] !== '\n') {
+      lineStart--;
+    }
+
+    let lineEnd = end;
+    while (lineEnd < text.length && text[lineEnd] !== '\n') {
+      lineEnd++;
+    }
+
+    const selectedLines = text.substring(lineStart, lineEnd);
+
+    if (type === 'bold' || type === 'italic') {
+      let textToInsert = '';
+      let selectionOffsetStart = 0;
+      let selectionOffsetEnd = 0;
+
+      if (type === 'bold') {
+        if (selectedText) {
+          textToInsert = `**${selectedText}**`;
+          selectionOffsetStart = 2;
+          selectionOffsetEnd = 2 + selectedText.length;
+        } else {
+          textToInsert = '**Teks Tebal**';
+          selectionOffsetStart = 2;
+          selectionOffsetEnd = 12;
+        }
+      } else {
+        if (selectedText) {
+          textToInsert = `*${selectedText}*`;
+          selectionOffsetStart = 1;
+          selectionOffsetEnd = 1 + selectedText.length;
+        } else {
+          textToInsert = '*Teks Miring*';
+          selectionOffsetStart = 1;
+          selectionOffsetEnd = 12;
+        }
+      }
+
+      const before = text.substring(0, start);
+      const after = text.substring(end);
+      const newValue = before + textToInsert + after;
+      setDescModalText(newValue);
+
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + selectionOffsetStart, start + selectionOffsetEnd);
+      }, 50);
+      return;
+    }
+
+    let formatted = '';
+    switch (type) {
+      case 'heading': {
+        const lines = selectedLines.split('\n');
+        formatted = lines.map(line => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('### ')) return line;
+          const leadingSpaces = line.match(/^(\s*)/)[1];
+          return `${leadingSpaces}### ${line.substring(leadingSpaces.length)}`;
+        }).join('\n');
+        break;
+      }
+      case 'bullet': {
+        const lines = selectedLines.split('\n');
+        formatted = lines.map(line => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('• ') || trimmed.startsWith('* ') || trimmed.startsWith('- ')) return line;
+          const leadingSpaces = line.match(/^(\s*)/)[1];
+          return `${leadingSpaces}• ${line.substring(leadingSpaces.length)}`;
+        }).join('\n');
+        break;
+      }
+      case 'numbered': {
+        const lines = selectedLines.split('\n');
+        let startNum = 1;
+        if (lines.length === 1 && !selectedText) {
+          const linesBefore = text.substring(0, lineStart).split('\n');
+          for (let i = linesBefore.length - 2; i >= 0; i--) {
+            const match = linesBefore[i].trim().match(/^(\d+)[.)]/);
+            if (match) {
+              startNum = parseInt(match[1], 10) + 1;
+              break;
+            }
+            if (linesBefore[i].trim() === '' && i < linesBefore.length - 2) {
+              break;
+            }
+          }
+        }
+        let count = startNum;
+        formatted = lines.map(line => {
+          const leadingSpaces = line.match(/^(\s*)/)[1];
+          const cleanContent = line.substring(leadingSpaces.length).replace(/^\d+[.)]\s*/, '');
+          const formattedLine = `${leadingSpaces}${count}. ${cleanContent}`;
+          count++;
+          return formattedLine;
+        }).join('\n');
+        break;
+      }
+      default:
+        return;
+    }
+
+    const before = text.substring(0, lineStart);
+    const after = text.substring(lineEnd);
+    const newValue = before + formatted + after;
+    setDescModalText(newValue);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(lineStart, lineStart + formatted.length);
+    }, 50);
+  };
+
+  const parsePreviewInlineLocal = (text) => {
+    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index} className="font-black text-on-surface">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={index} className="italic">{part.slice(1, -1)}</em>;
+      }
+      return part;
+    });
+  };
+
+  const renderPreviewInline = (desc) => {
+    if (!desc) return <p className="italic text-on-surface-variant/70 text-sm">Belum ada konten deskripsi...</p>;
+    const lines = desc.split('\n');
+    return (
+      <div className="space-y-3 font-sans text-on-surface">
+        {lines.map((line, idx) => {
+          const leadingSpacesMatch = line.match(/^(\s*)/);
+          const spaceCount = leadingSpacesMatch ? leadingSpacesMatch[1].length : 0;
+          const indentLevel = Math.floor(spaceCount / 2);
+          
+          let trimmed = line.trim();
+          if (!trimmed) return <div key={idx} className="h-2" />;
+          
+          const indentStyle = { paddingLeft: `${indentLevel * 1.5 + 0.5}rem` };
+
+          if (trimmed.startsWith('###')) {
+            return (
+              <h4 key={idx} style={indentStyle} className="text-base font-black text-on-surface mt-4 mb-2">
+                {trimmed.replace('###', '').trim()}
+              </h4>
+            );
+          }
+          if (trimmed.startsWith('##')) {
+            return (
+              <h3 key={idx} style={indentStyle} className="text-lg font-black text-on-surface mt-4 mb-2">
+                {trimmed.replace('##', '').trim()}
+              </h3>
+            );
+          }
+          if (trimmed.startsWith('•') || trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+            const cleanText = trimmed.replace(/^(•|\*\s+|\-\s+)/, '');
+            return (
+              <div key={idx} style={indentStyle} className="flex gap-2 items-start">
+                <span className="text-primary font-black mt-0.5">•</span>
+                <span className="flex-1 text-sm">{parsePreviewInlineLocal(cleanText)}</span>
+              </div>
+            );
+          }
+          const numMatch = trimmed.match(/^(\d+)[.)]\s*(.*)/);
+          if (numMatch) {
+            const num = numMatch[1];
+            const cleanText = numMatch[2];
+            return (
+              <div key={idx} style={indentStyle} className="flex gap-2 items-start">
+                <span className="text-primary font-black min-w-[16px] text-right">{num}.</span>
+                <span className="flex-1 text-sm">{parsePreviewInlineLocal(cleanText)}</span>
+              </div>
+            );
+          }
+          return (
+            <p key={idx} style={indentStyle} className="leading-relaxed text-sm">
+              {parsePreviewInlineLocal(trimmed)}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="bg-surface text-on-surface font-sans antialiased min-h-screen flex">
       <TeacherSidebar />
@@ -880,17 +1148,18 @@ const TeacherCreateCourse = () => {
       <main className="flex-1 lg:ml-[280px] pt-20 lg:pt-10 pb-24 lg:pb-8 px-margin-mobile lg:px-margin-desktop w-full max-w-[1440px] mx-auto min-h-screen">
         
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-12">
           <div>
             <h1 className="text-4xl md:text-5xl font-black text-on-surface mb-2">{currentStep === 1 ? 'Create Course' : 'Manage Syllabus'}</h1>
             <p className="text-lg text-on-surface-variant font-bold">
               {currentStep === 1 ? 'Rancang kursus berkualitas tinggi untuk siswa Anda.' : 'Tambahkan materi, video, dan tugas untuk kursus Anda.'}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
              <button 
+              type="button"
               onClick={() => navigate('/teacher/courses')}
-               className="px-8 py-3 rounded-2xl border-4 border-on-surface font-black text-on-surface hover:bg-surface-variant transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
+              className="px-4 sm:px-8 py-2.5 sm:py-3 rounded-2xl border-4 border-on-surface font-black text-on-surface hover:bg-surface-variant transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none text-xs sm:text-base flex-grow lg:flex-none text-center justify-center items-center"
             >
               Cancel
             </button>
@@ -901,7 +1170,7 @@ const TeacherCreateCourse = () => {
                   await fetchCollaborators(courseId);
                   setCurrentStep(1);
                 }}
-                className="px-8 py-3 rounded-2xl border-4 border-on-surface font-black text-on-surface hover:bg-surface-variant transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none cursor-pointer"
+                className="px-4 sm:px-8 py-2.5 sm:py-3 rounded-2xl border-4 border-on-surface font-black text-on-surface hover:bg-surface-variant transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none cursor-pointer text-xs sm:text-base flex-grow lg:flex-none text-center justify-center items-center"
               >
                 Edit Info & Collab
               </button>
@@ -913,7 +1182,7 @@ const TeacherCreateCourse = () => {
                 type="button"
                 onClick={handleSaveDraftAndExit}
                 disabled={loading}
-                className="px-8 py-3 rounded-2xl bg-white text-on-surface font-black border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 flex items-center gap-1.5"
+                className="px-4 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-white text-on-surface font-black border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 text-xs sm:text-base flex-grow lg:flex-none text-center"
               >
                 <span>💾</span>
                 Simpan Draft
@@ -924,17 +1193,17 @@ const TeacherCreateCourse = () => {
               <button 
                 onClick={handleCreateCourseShell}
                 disabled={loading}
-                className="px-8 py-3 rounded-2xl bg-primary text-on-primary font-black border-4 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50"
+                className="px-4 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-primary text-on-primary font-black border-4 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 text-xs sm:text-base flex-grow lg:flex-none text-center justify-center items-center"
               >
                 {loading ? 'Processing...' : 'Next: Syllabus'}
               </button>
             ) : courseStatus === 'locked' ? (
-              <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-error/10 border-4 border-error text-error font-black">
+              <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-error/10 border-4 border-error text-error font-black text-xs sm:text-base flex-grow lg:flex-none justify-center">
                 <span className="material-symbols-outlined text-lg">lock</span>
                 Terkunci
               </div>
             ) : courseStatus === 'published' ? (
-              <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-100 border-4 border-emerald-500 text-emerald-700 font-black">
+              <div className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-emerald-100 border-4 border-emerald-500 text-emerald-700 font-black text-xs sm:text-base flex-grow lg:flex-none justify-center">
                 <span className="material-symbols-outlined text-lg">public</span>
                 Sudah Published
               </div>
@@ -943,7 +1212,7 @@ const TeacherCreateCourse = () => {
                 type="button"
                 onClick={() => setShowConfirmPublish(true)}
                 disabled={loading}
-                className="px-8 py-3 rounded-2xl bg-emerald-600 text-white font-black border-4 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50"
+                className="px-4 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-emerald-600 text-white font-black border-4 border-on-surface shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-50 text-xs sm:text-base flex-grow lg:flex-none text-center justify-center items-center"
               >
                 🚀 Publish Course
               </button>
@@ -1411,31 +1680,44 @@ const TeacherCreateCourse = () => {
 
             {sections.map((section, sIdx) => (
               <div key={section.id} className="bg-white rounded-[40px] border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
-                <div className="bg-surface-variant/30 p-8 border-b-4 border-on-surface flex justify-between items-center">
+                <div className="bg-surface-variant/30 p-5 md:p-8 border-b-4 border-on-surface flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-on-surface text-white rounded-lg flex items-center justify-center font-black">{sIdx + 1}</div>
-                    <h3 className="text-2xl font-black">{section.title}</h3>
+                    <h3 className="text-xl md:text-2xl font-black">{section.title}</h3>
                   </div>
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={() => openSyllabusModal(section.id, 'material')}
-                      className="flex items-center gap-2 bg-secondary-container text-on-secondary-container px-6 py-2 rounded-xl border-2 border-on-surface font-black shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all"
-                    >
-                      <Icon name="add" className="w-5 h-5" /> Tambah Materi
-                    </button>
-                    <button 
-                      onClick={() => openSyllabusModal(section.id, 'assignment')}
-                      className="flex items-center gap-2 bg-primary-container text-primary px-6 py-2 rounded-xl border-2 border-on-surface font-black shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all"
-                    >
-                      <Icon name="assignment" className="w-5 h-5" /> Tambah Tugas
-                    </button>
-                    <button 
-                      onClick={() => openSyllabusModal(section.id, 'coding')}
-                      className="flex items-center gap-2 bg-tertiary-container text-tertiary px-6 py-2 rounded-xl border-2 border-on-surface font-black shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all"
-                    >
-                      <Icon name="code" className="w-5 h-5" /> Tambah Tugas Coding
-                    </button>
-                  </div>
+                  {courseStatus !== 'locked' ? (
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto mt-2 md:mt-0 justify-start md:justify-end">
+                      <button 
+                        onClick={() => openSyllabusModal(section.id, 'material')}
+                        className="flex items-center gap-1.5 bg-secondary-container text-on-secondary-container px-3 md:px-6 py-2 rounded-xl border-2 border-on-surface font-black text-xs md:text-sm shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex-grow md:flex-none justify-center"
+                      >
+                        <Icon name="add" className="w-4 h-4 md:w-5 md:h-5" /> Tambah Materi
+                      </button>
+                      <button 
+                        onClick={() => openSyllabusModal(section.id, 'assignment')}
+                        className="flex items-center gap-1.5 bg-primary-container text-primary px-3 md:px-6 py-2 rounded-xl border-2 border-on-surface font-black text-xs md:text-sm shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex-grow md:flex-none justify-center"
+                      >
+                        <Icon name="assignment" className="w-4 h-4 md:w-5 md:h-5" /> Tambah Tugas
+                      </button>
+                      <button 
+                        onClick={() => openSyllabusModal(section.id, 'coding')}
+                        className="flex items-center gap-1.5 bg-tertiary-container text-tertiary px-3 md:px-6 py-2 rounded-xl border-2 border-on-surface font-black text-xs md:text-sm shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex-grow md:flex-none justify-center"
+                      >
+                        <Icon name="code" className="w-4 h-4 md:w-5 md:h-5" /> Tambah Tugas Coding
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteSection(section.id)}
+                        className="flex items-center justify-center bg-error text-white p-2 md:p-3 rounded-xl border-2 border-on-surface font-black shadow-[2px_2px_0px_0px_#000] hover:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex-grow md:flex-none"
+                        title="Hapus Section"
+                      >
+                        <Icon name="delete" className="w-4 h-4 md:w-5 md:h-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="px-4 py-2 bg-error/10 text-error border-2 border-error rounded-xl font-black text-xs flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs">lock</span> Terkunci
+                    </span>
+                  )}
                 </div>
 
                 <div className="p-8 space-y-4">
@@ -1454,10 +1736,20 @@ const TeacherCreateCourse = () => {
                       <div className="flex gap-2">
                         <button 
                           onClick={() => openSyllabusModal(section.id, syl.type || 'material', syl)} 
-                          className="p-2 hover:bg-primary-container rounded-lg border border-on-surface transition-colors"
+                          className="p-2 hover:bg-primary-container rounded-lg border border-on-surface transition-colors cursor-pointer"
+                          title={courseStatus === 'locked' ? 'Lihat Detail' : 'Edit'}
                         >
-                          <Icon name="edit" className="w-4 h-4" />
+                          <Icon name={courseStatus === 'locked' ? 'visibility' : 'edit'} className="w-4 h-4" />
                         </button>
+                        {courseStatus !== 'locked' && (
+                          <button 
+                            onClick={() => handleDeleteSyllabusDirectly(syl.id)} 
+                            className="p-2 hover:bg-error/15 text-error rounded-lg border border-on-surface transition-colors cursor-pointer"
+                            title="Hapus"
+                          >
+                            <Icon name="delete" className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1465,17 +1757,17 @@ const TeacherCreateCourse = () => {
               </div>
             ))}
 
-            {sections.length > 0 && (
+            {sections.length > 0 && courseStatus !== 'locked' && (
               <div className="flex flex-col gap-4">
                 <button 
                   onClick={handleOpenSectionModal}
-                  className="w-full py-6 rounded-[40px] border-4 border-dashed border-on-surface hover:bg-surface-variant/10 font-black text-xl flex items-center justify-center gap-3 transition-all"
+                  className="w-full py-6 rounded-[40px] border-4 border-dashed border-on-surface hover:bg-surface-variant/10 font-black text-xl flex items-center justify-center gap-3 transition-all cursor-pointer"
                 >
                   <Icon name="add_circle" className="w-8 h-8" /> Tambah Section Baru
                 </button>
                 <button 
                   onClick={handleAddFinalProject}
-                  className="w-full py-6 rounded-[40px] bg-primary-container text-on-primary-container border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none font-black text-xl flex items-center justify-center gap-3 transition-all"
+                  className="w-full py-6 rounded-[40px] bg-primary-container text-on-primary-container border-4 border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none font-black text-xl flex items-center justify-center gap-3 transition-all cursor-pointer"
                 >
                   <Icon name="workspace_premium" className="w-8 h-8" /> Tambah Tugas Akhir (Final Project)
                 </button>
@@ -1847,10 +2139,10 @@ const TeacherCreateCourse = () => {
 
               <div className="p-8 border-t-4 border-on-surface flex justify-end gap-4 bg-surface">
                 <div className="flex gap-4 w-full">
-                  {editingSyllabus.id && (
+                  {editingSyllabus.id && courseStatus !== 'locked' && (
                     <button 
                       onClick={handleDeleteSyllabus}
-                      className="px-8 py-4 rounded-2xl border-4 border-on-surface bg-error text-white font-black shadow-[4px_4px_0px_0px_#000] hover:translate-y-1 transition-all"
+                      className="px-8 py-4 rounded-2xl border-4 border-on-surface bg-error text-white font-black shadow-[4px_4px_0px_0px_#000] hover:translate-y-1 transition-all cursor-pointer"
                     >
                       Delete
                     </button>
@@ -1858,17 +2150,19 @@ const TeacherCreateCourse = () => {
                   <div className="flex-1"></div>
                   <button 
                     onClick={() => setSyllabusModalOpen(false)}
-                    className="px-8 py-4 rounded-2xl border-4 border-on-surface font-black hover:bg-surface-variant transition-all"
+                    className="px-8 py-4 rounded-2xl border-4 border-on-surface font-black hover:bg-surface-variant transition-all cursor-pointer"
                   >
-                    Cancel
+                    {courseStatus === 'locked' ? 'Close' : 'Cancel'}
                   </button>
-                  <button 
-                    onClick={saveSyllabus}
-                    disabled={loading}
-                    className="px-10 py-4 bg-primary text-on-primary rounded-2xl border-4 border-on-surface font-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all"
-                  >
-                    {loading ? 'Saving...' : `Save ${editingSyllabus.type === 'assignment' ? 'Assignment' : editingSyllabus.type === 'final_project' ? 'Final Project' : 'Syllabus'}`}
-                  </button>
+                  {courseStatus !== 'locked' && (
+                    <button 
+                      onClick={saveSyllabus}
+                      disabled={loading}
+                      className="px-10 py-4 bg-primary text-on-primary rounded-2xl border-4 border-on-surface font-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all cursor-pointer"
+                    >
+                      {loading ? 'Saving...' : `Save ${editingSyllabus.type === 'assignment' ? 'Assignment' : editingSyllabus.type === 'final_project' ? 'Final Project' : 'Syllabus'}`}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1930,6 +2224,134 @@ const TeacherCreateCourse = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Fullscreen Description Editor Modal for Mobile */}
+      {showDescModal && (
+        <div className="fixed inset-0 z-[400] bg-background text-on-surface font-sans antialiased flex flex-col h-screen overflow-hidden">
+          {/* Top Header Navigation */}
+          <header className="bg-surface border-b-4 border-on-surface px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4 shrink-0 shadow-[0_4px_0_0_rgba(0,0,0,1)] z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary-container rounded-xl border-2 border-on-surface flex items-center justify-center shadow-[2px_2px_0px_0px_#000]">
+                <span className="material-symbols-outlined text-on-primary-container font-black">edit_note</span>
+              </div>
+              <div>
+                <h1 className="text-lg font-black text-on-surface">Editor Deskripsi (Fullscreen)</h1>
+                <p className="text-[10px] text-on-surface-variant font-bold">Tekan Simpan & Terapkan untuk memperbarui deskripsi.</p>
+              </div>
+            </div>
+
+            {/* Mobile Tab Toggle */}
+            <div className="flex border-2 border-on-surface rounded-xl overflow-hidden shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
+              <button
+                type="button"
+                onClick={() => setDescModalTab('write')}
+                className={`px-4 py-1.5 text-xs font-black transition-colors ${descModalTab === 'write' ? 'bg-primary text-on-primary' : 'bg-surface text-on-surface'}`}
+              >
+                Tulis
+              </button>
+              <button
+                type="button"
+                onClick={() => setDescModalTab('preview')}
+                className={`px-4 py-1.5 text-xs font-black transition-colors ${descModalTab === 'preview' ? 'bg-primary text-on-primary' : 'bg-surface text-on-surface'}`}
+              >
+                Pratinjau
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowDescModal(false)}
+                className="px-4 py-2 rounded-xl border-2 border-on-surface font-black text-xs hover:bg-surface-variant transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, description: descModalText }));
+                  setShowDescModal(false);
+                  showToast('Deskripsi berhasil diterapkan!');
+                }}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl border-2 border-on-surface font-black text-xs hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5"
+              >
+                <Icon name="check" className="w-4 h-4" />
+                Simpan & Terapkan
+              </button>
+            </div>
+          </header>
+
+          {/* Main Workspace */}
+          <main className="flex-1 overflow-hidden flex flex-col md:flex-row bg-surface">
+            {/* Editor */}
+            <div className={`flex-1 flex flex-col p-4 gap-3 border-r-0 md:border-r-4 border-on-surface h-full ${descModalTab === 'write' ? 'flex' : 'hidden md:flex'}`}>
+              {/* Toolbar */}
+              <div className="flex flex-wrap gap-1.5 items-center bg-surface-variant/20 p-2 border-2 border-on-surface rounded-2xl shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <button
+                  type="button"
+                  onClick={() => applyFormattingInline('bold')}
+                  className="w-8 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 transition-all"
+                  title="Bold"
+                >
+                  B
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyFormattingInline('italic')}
+                  className="w-8 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 transition-all italic"
+                  title="Italic"
+                >
+                  I
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyFormattingInline('heading')}
+                  className="px-2 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 transition-all"
+                  title="Heading 3"
+                >
+                  H3
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyFormattingInline('bullet')}
+                  className="px-2 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 transition-all"
+                  title="Bullet List"
+                >
+                  • Poin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyFormattingInline('numbered')}
+                  className="px-2 h-8 flex items-center justify-center text-xs font-black border-2 border-on-surface rounded-xl bg-white hover:bg-surface-variant/30 transition-all"
+                  title="Numbered List"
+                >
+                  1. Poin
+                </button>
+              </div>
+
+              <textarea
+                id="inline-description-textarea"
+                className="flex-1 w-full p-4 border-4 border-on-surface rounded-3xl bg-white font-mono text-sm leading-relaxed focus:outline-none resize-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                placeholder="Tulis deskripsi kursus yang lengkap di sini..."
+                value={descModalText}
+                onChange={(e) => setDescModalText(e.target.value)}
+              />
+            </div>
+
+            {/* Live Preview */}
+            <div className={`flex-1 bg-surface-variant/10 p-4 flex flex-col gap-3 overflow-hidden h-full ${descModalTab === 'preview' ? 'flex' : 'hidden md:flex'}`}>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Pratinjau Tampilan</h4>
+              </div>
+
+              <div className="flex-1 bg-white border-4 border-on-surface rounded-3xl p-4 overflow-y-auto shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] max-h-full">
+                <h2 className="text-lg font-black mb-3 pb-3 border-b border-on-background/10">Tentang Kursus Ini</h2>
+                {renderPreviewInline(descModalText)}
+              </div>
+            </div>
+          </main>
         </div>
       )}
     </div>

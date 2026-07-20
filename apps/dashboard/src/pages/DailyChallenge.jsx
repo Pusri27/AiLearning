@@ -482,8 +482,8 @@ Generate 10 high-quality quiz questions in Indonesian language based on the stud
   return (
     <div className="bg-surface text-on-surface font-body-md flex h-screen overflow-hidden">
       <Sidebar />
-      <div className="flex-1 overflow-y-auto flex flex-col">
-        <header className="bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] flex justify-between items-center w-full px-10 h-16 shrink-0 sticky top-0 z-40">
+      <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
+        <header className="bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] flex justify-between items-center w-full px-4 md:px-10 h-14 md:h-16 shrink-0 sticky top-0 z-40">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/study')}
@@ -495,7 +495,7 @@ Generate 10 high-quality quiz questions in Indonesian language based on the stud
           </div>
         </header>
 
-        <main className="flex-grow flex flex-col items-center justify-center p-6 md:p-8 w-full max-w-3xl mx-auto">
+        <main className="flex-grow flex flex-col items-center justify-center p-4 md:p-6 lg:p-8 w-full max-w-3xl mx-auto pb-24 md:pb-8">
           {/* Header & Progress */}
           <div className="w-full mb-6 shrink-0">
             <div className="flex justify-between items-end mb-3">

@@ -115,8 +115,8 @@ const BlogFeed = () => {
   return (
     <div className="bg-background text-on-surface font-plus-jakarta flex h-screen overflow-hidden">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
 
           {/* ── Top NavBar ───────────────────────────────────────── */}
           <header className="sticky top-0 z-40 flex justify-between items-center px-6 lg:px-margin-desktop py-4 bg-surface border-b-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

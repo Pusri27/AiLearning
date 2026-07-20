@@ -257,7 +257,7 @@ const parseMaterialContent = (content) => {
       elements.push({ type: 'h2', text: trimmed.replace(/^##\s+/, '') });
     } else if (trimmed.startsWith('# ')) {
       elements.push({ type: 'h1', text: trimmed.replace(/^#\s+/, '') });
-    } else if (trimmed.startsWith('•') || trimmed.startsWith('*') || trimmed.startsWith('-')) {
+    } else if (trimmed.startsWith('•') || (trimmed.startsWith('*') && !trimmed.startsWith('**')) || trimmed.startsWith('-')) {
       const match = line.match(/^(\s*)([•*\-])\s*(.*)/);
       const indent = match ? match[1].length : 0;
       const cleanText = match ? match[3] : trimmed.replace(/^[•*\-]\s*/, '');

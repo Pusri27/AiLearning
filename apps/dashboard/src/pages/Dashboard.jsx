@@ -10,6 +10,22 @@ import { useUserProfile } from '../context/UserProfileContext';
 import { getTranslation } from '../lib/i18n';
 import { HaiIcon, CheckIcon } from '../components/Icons';
 
+/* ─── Star Rating Component ─── */
+const StarRating = ({ value, onChange }) => (
+  <div className="flex gap-2">
+    {[1, 2, 3, 4, 5].map(star => (
+      <button
+        key={star}
+        type="button"
+        onClick={() => onChange(star)}
+        className={`text-5xl transition-transform hover:scale-125 ${star <= value ? 'text-[#FFB800]' : 'text-surface-variant'}`}
+      >
+        ★
+      </button>
+    ))}
+  </div>
+);
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { profile } = useUserProfile();
@@ -18,6 +34,13 @@ const Dashboard = () => {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [recentPosts, setRecentPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Rating modal states
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingCourse, setRatingCourse] = useState(null);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,6 +66,7 @@ const Dashboard = () => {
               title,
               image_url,
               category,
+              status,
               course_syllabus (id)
             )
           `)
@@ -60,10 +84,16 @@ const Dashboard = () => {
             .select('course_id, syllabus_id')
             .eq('user_id', currentSession.user.id);
 
+          // Fetch user ratings
+          const { data: userRatings } = await supabase
+            .from('course_ratings')
+            .select('course_id, rating, feedback')
+            .eq('user_id', currentSession.user.id);
+
           const mapped = enrollData
             .map(e => {
               const course = Array.isArray(e.courses) ? e.courses[0] : e.courses;
-              if (!course) return null;
+              if (!course || course.status === 'draft') return null;
 
               const totalSyllabus = course.course_syllabus?.length || 0;
               const completedInCourse = userProgress?.filter(p => p.course_id === course.id).length || 0;
@@ -71,9 +101,12 @@ const Dashboard = () => {
                 ? Math.round((completedInCourse / totalSyllabus) * 100) 
                 : 0;
 
+              const userRating = userRatings?.find(r => r.course_id === course.id) || null;
+
               return { 
                 enrollId: e.id, 
                 progress: progressPercent, 
+                userRating,
                 ...course 
               };
             })
@@ -95,6 +128,41 @@ const Dashboard = () => {
     };
     fetchData();
   }, [navigate, isGuest, profile.role]);
+
+  const handleOpenRating = (course) => {
+    setRatingCourse(course);
+    setRatingValue(0);
+    setFeedbackText('');
+    setShowRatingModal(true);
+  };
+
+  const handleSubmitRating = async () => {
+    if (ratingValue === 0 || !ratingCourse) { showToast('Pilih bintang terlebih dahulu.', 'error'); return; }
+    setSubmittingRating(true);
+    try {
+      const { error } = await supabase.from('course_ratings').upsert({
+        course_id: Number(ratingCourse.id),
+        user_id: profile.id,
+        rating: ratingValue,
+        feedback: feedbackText.trim() || null,
+      }, { onConflict: 'course_id,user_id' });
+      if (error) throw error;
+      
+      // Update state
+      setEnrolledCourses(prev => prev.map(c => c.id === ratingCourse.id ? {
+        ...c,
+        userRating: { rating: ratingValue, feedback: feedbackText }
+      } : c));
+
+      setShowRatingModal(false);
+      setRatingCourse(null);
+      showToast('Terima kasih atas ulasan kamu! 🌟', 'success');
+    } catch (err) {
+      showToast('Gagal menyimpan ulasan.', 'error');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
 
   const totalProgress = useMemo(() => {
     if (!enrolledCourses.length) return 0;
@@ -164,9 +232,9 @@ const Dashboard = () => {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <header className="flex justify-between items-center px-6 md:px-margin-desktop h-20 w-full bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] z-[50] sticky top-0 shrink-0">
+        <header className="flex justify-between items-center px-4 md:px-margin-desktop h-16 md:h-20 w-full bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] z-[50] sticky top-0 shrink-0">
           <h2 className="font-headline-md font-extrabold text-on-surface">{t('dashboard')}</h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <div className="hidden md:flex items-center bg-white border-2 border-on-surface px-3 py-2 w-56 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg">
               <Icon name="search" className="w-4 h-4 text-on-surface-variant shrink-0 mr-2" />
               <input className="border-none focus:ring-0 p-0 text-sm w-full bg-transparent" placeholder={t('searchCourses')} type="text" />
@@ -176,7 +244,7 @@ const Dashboard = () => {
           </div>
         </header>
 
-        <main className="flex-1 p-6 md:p-margin-desktop overflow-y-auto">
+        <main className="flex-1 p-4 md:p-6 lg:p-margin-desktop overflow-y-auto pb-24 md:pb-6">
           {/* Welcome Banner */}
           <section className="mb-8 relative overflow-hidden bg-primary-container border-2 border-on-surface p-8 md:p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row justify-between items-center gap-6 rounded-xl">
             <div className="max-w-xl relative z-10">
@@ -248,6 +316,25 @@ const Dashboard = () => {
                       <div className="p-5 flex flex-col flex-grow">
                         <h4 className="font-headline-md mb-3 text-on-surface line-clamp-1">{course.title}</h4>
                         <div className="mt-auto">
+                          {course.progress >= 100 && (
+                            <div className="mb-3">
+                              {course.userRating ? (
+                                <div className="text-xs font-black text-amber-500 flex items-center gap-1">
+                                  <span>⭐ Rating Kamu: {course.userRating.rating}/5</span>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenRating(course);
+                                  }}
+                                  className="w-full py-1.5 bg-[#FFB800] text-on-surface text-xs font-black rounded-lg border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  ⭐ Beri Rating Kursus
+                                </button>
+                              )}
+                            </div>
+                          )}
                           <div className="flex justify-between text-xs font-bold text-on-surface-variant mb-1.5">
                             <span>Progress</span>
                             <span className="text-primary">{course.progress}%</span>
@@ -346,6 +433,35 @@ const Dashboard = () => {
             </div>
           </div>
         </main>
+      {showRatingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[40px] border-4 border-on-surface shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-10 max-w-lg w-full animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="text-6xl mb-4">🎓</div>
+              <h2 className="text-3xl font-black text-on-surface mb-2">Kursus Selesai!</h2>
+              <p className="text-on-surface-variant font-bold">Bagaimana pengalaman belajar kamu di kursus <span className="text-primary font-black">"{ratingCourse?.title}"</span>?</p>
+            </div>
+            <div className="flex justify-center mb-6">
+              <StarRating value={ratingValue} onChange={setRatingValue} />
+            </div>
+            {ratingValue > 0 && (
+              <p className="text-center text-sm font-black text-on-surface-variant mb-6">
+                {['', 'Sangat Buruk 😞', 'Kurang Baik 😕', 'Cukup Baik 🙂', 'Bagus! 😊', 'Luar Biasa! 🌟'][ratingValue]}
+              </p>
+            )}
+            <textarea
+              className="w-full p-4 rounded-2xl border-2 border-on-surface font-medium resize-none focus:outline-none focus:ring-4 focus:ring-primary/20 mb-6 bg-surface-container-low"
+              rows={4} placeholder="Tulis ulasan kamu (opsional)..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)}
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setShowRatingModal(false); setRatingCourse(null); }} className="flex-1 py-4 rounded-2xl border-2 border-on-surface font-black hover:bg-surface-container transition-all">Nanti Saja</button>
+              <button onClick={handleSubmitRating} disabled={submittingRating || ratingValue === 0} className="flex-1 py-4 rounded-2xl bg-primary text-on-primary border-2 border-on-surface font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all disabled:opacity-50">
+                {submittingRating ? 'Mengirim...' : 'Kirim Ulasan ⭐'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

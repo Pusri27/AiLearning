@@ -52,6 +52,7 @@ const TeacherCoursePreview = () => {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const [showConfirmNext, setShowConfirmNext] = useState(false);
+  const [showMobileLessons, setShowMobileLessons] = useState(false);
 
   const getEmbedUrl = (url) => {
     if (!url) return '';
@@ -136,6 +137,7 @@ const TeacherCoursePreview = () => {
     setIsVideoPlaying(false);
     if (lesson.initial_code) setCodeBody(lesson.initial_code);
     else setCodeBody('');
+    setShowMobileLessons(false);
   };
 
   const handleNextLesson = () => {
@@ -213,9 +215,19 @@ const TeacherCoursePreview = () => {
         </div>
 
         {activeLesson ? (
-          <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 48px)' }}>
+          <div className="flex flex-1 overflow-hidden relative h-[calc(100vh-116px)] lg:h-[calc(100vh-48px)]">
+            {showMobileLessons && (
+              <div 
+                className="fixed inset-0 bg-black/50 z-30 md:hidden top-[48px]"
+                onClick={() => setShowMobileLessons(false)}
+              />
+            )}
             {/* Sidebar: Section & Lesson List */}
-            <aside className="w-72 shrink-0 bg-surface border-r-2 border-on-background flex flex-col overflow-hidden">
+            <aside className={`
+              fixed md:relative top-[48px] md:top-0 bottom-0 left-0 z-40 md:z-auto
+              w-72 shrink-0 bg-surface border-r-2 border-on-background flex flex-col overflow-hidden transition-transform duration-300 ease-in-out
+              ${showMobileLessons ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}>
               {/* Course Title */}
               <div className="p-5 border-b-2 border-on-background bg-surface-container">
                 <div className="flex items-center gap-3 mb-3">
@@ -292,9 +304,16 @@ const TeacherCoursePreview = () => {
             {/* Main Content */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-surface-bright">
               <header className="h-16 bg-surface border-b-2 border-on-background shadow-[0px_2px_0px_0px_rgba(0,0,0,1)] flex items-center px-6 justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                  <Icon name={activeLesson.icon || 'menu_book'} className="w-6 h-6 text-primary" />
-                  <h1 className="font-black text-on-surface truncate">{activeLesson.title}</h1>
+                <div className="flex items-center gap-3 min-w-0">
+                  <button 
+                    onClick={() => setShowMobileLessons(true)}
+                    className="p-1.5 md:hidden border-2 border-on-background rounded-lg hover:bg-surface-container transition-all flex items-center justify-center shrink-0"
+                    title="Daftar Materi"
+                  >
+                    <Icon name="menu" className="w-5 h-5" />
+                  </button>
+                  <Icon name={activeLesson.icon || 'menu_book'} className="w-6 h-6 text-primary hidden sm:block shrink-0" />
+                  <h1 className="font-black text-on-surface truncate text-sm sm:text-base">{activeLesson.title}</h1>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handlePrevLesson} disabled={lessons.findIndex(l => l.id === activeLesson.id) === 0} className="p-2 border-2 border-on-background rounded-lg hover:bg-surface-container transition-all disabled:opacity-50 disabled:cursor-not-allowed">
@@ -306,7 +325,7 @@ const TeacherCoursePreview = () => {
                 </div>
               </header>
 
-              <div className="flex-1 overflow-y-auto p-6 md:p-10 lg:px-20 max-w-5xl mx-auto w-full space-y-8">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 lg:px-20 max-w-5xl mx-auto w-full space-y-8">
                 {/* Video */}
                 {activeLesson.type === 'video' && (
                   isVideoPlaying && activeLesson.video_url ? (
@@ -407,11 +426,11 @@ const TeacherCoursePreview = () => {
                 )}
 
                 {/* Navigation Footer */}
-                <div className="flex justify-between items-center py-6 border-t-2 border-on-background">
+                <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center py-6 border-t-2 border-on-background">
                   <button onClick={handlePrevLesson} disabled={lessons.findIndex(l => l.id === activeLesson.id) === 0} className="px-6 py-3 font-bold text-on-surface border-2 border-on-background rounded-lg hover:bg-surface-container transition-all disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                     Materi Sebelumnya
                   </button>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
                     {/* Simulation action button */}
                     <button 
                       onClick={handleMarkCompleteSimulation}

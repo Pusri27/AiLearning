@@ -18,6 +18,8 @@ const CourseLesson = () => {
   const [enrollmentProgress, setEnrollmentProgress] = useState(0);
   const [certificate, setCertificate] = useState(null);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [showFinalProjectModal, setShowFinalProjectModal] = useState(false);
+  const [showMobileLessons, setShowMobileLessons] = useState(false);
 
   const [showConfirmNext, setShowConfirmNext] = useState(false);
   const [codeBody, setCodeBody] = useState(
@@ -69,21 +71,41 @@ const CourseLesson = () => {
 
   useEffect(() => {
     const fetchSubmission = async () => {
-      if (activeLesson?.type === 'assignment') {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          try {
-            const { data } = await supabase.from('submissions').select('*').eq('student_id', session.user.id).eq('syllabus_id', activeLesson.id).maybeSingle();
-            setSubmission(data);
-          } catch (err) { console.error("Error fetching submission:", err); }
+      if (activeLesson) {
+        const isTask = activeLesson.type === 'assignment' || activeLesson.type === 'final_project' || activeLesson.type === 'interactive';
+        if (isTask) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            try {
+              const cleanCourseId = isNaN(Number(courseId)) ? courseId : Number(courseId);
+              const { data } = await supabase.from('submissions')
+                .select('*')
+                .eq('student_id', session.user.id)
+                .eq('course_id', cleanCourseId)
+                .eq('syllabus_id', activeLesson.id)
+                .maybeSingle();
+              setSubmission(data);
+              
+              if (activeLesson.type === 'interactive') {
+                if (data && data.assignment_text) {
+                  setCodeBody(data.assignment_text);
+                } else {
+                  setCodeBody(activeLesson.initial_code || "function solution(data) {\n  return data;\n}");
+                }
+                setTerminalOutput("");
+              }
+            } catch (err) { 
+              console.error("Error fetching submission:", err); 
+            }
+          }
+        } else {
+          setSubmission(null);
+          setSubmissionFile(null);
         }
-      } else {
-        setSubmission(null);
-        setSubmissionFile(null);
       }
     };
     fetchSubmission();
-  }, [activeLesson]);
+  }, [activeLesson, courseId]);
 
   const [sections, setSections] = useState([]);
   const [completedIds, setCompletedIds] = useState([]);
@@ -125,7 +147,14 @@ const CourseLesson = () => {
       const cleanCourseId = isNaN(Number(courseId)) ? courseId : Number(courseId);
       const { data: courseData } = await supabase.from('courses').select('*').eq('id', cleanCourseId).single();
       if (!courseData) { setLoading(false); return; }
-      setCourse(courseData);
+
+      let instructorData = null;
+      if (courseData.instructor_id) {
+        const { data: instData } = await supabase
+          .from('profiles').select('full_name, avatar_url, signature_url').eq('id', courseData.instructor_id).maybeSingle();
+        instructorData = instData;
+      }
+      setCourse({ ...courseData, profiles: instructorData });
 
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -167,17 +196,27 @@ const CourseLesson = () => {
 
         const current = mappedLessons.find(l => l.id.toString() === lessonId) || mappedLessons[0];
         setActiveLesson(current);
-        if (current.type === 'interactive' && current.initial_code) {
-          setCodeBody(current.initial_code);
-        }
       } else { navigate('/login'); }
       setLoading(false);
     };
     fetchCourseAndProgress();
   }, [courseId, lessonId, navigate]);
 
-  const handleToggleLessonCompleted = async (lessonToToggle) => {
-    const isNowCompleted = !lessonToToggle.completed;
+  useEffect(() => {
+    setShowMobileLessons(false);
+  }, [activeLesson]);
+
+  const handleToggleLessonCompleted = async (lessonToToggle, forceCompleteState = null) => {
+    const isNowCompleted = forceCompleteState !== null ? forceCompleteState : !lessonToToggle.completed;
+    
+    // Enforce submission file requirement for assignments when completing
+    if (isNowCompleted && (lessonToToggle.type === 'assignment' || lessonToToggle.type === 'final_project')) {
+      if (forceCompleteState === null && !submission) {
+        showToast("Silakan unggah dan kirim file tugas Anda terlebih dahulu.", "error");
+        return;
+      }
+    }
+
     const updated = lessons.map(l => l.id === lessonToToggle.id ? { ...l, completed: isNowCompleted } : l);
     setLessons(updated);
     
@@ -235,7 +274,9 @@ const CourseLesson = () => {
     const studentName = profile?.full_name || "Pelajar Premium";
     const courseTitle = course?.title || "Kelas AiLearning";
     const certId = certificate?.id ? `CERT-${certificate.id}` : `CERT-${courseId}-${profile?.id?.slice(0, 8).toUpperCase()}`;
-    const content = certificate?.certificate_url ? `<div style="display:flex; justify-content:center; align-items:center; height:100vh; margin:0; padding:0; box-sizing:border-box; background:#1e293b;"><img src="${certificate.certificate_url}" style="max-width:100%; max-height:100%; object-fit:contain; border: 8px solid #000; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);" /></div>` : `<div style="font-family:'Outfit', 'Inter', sans-serif; display:flex; justify-content:center; align-items:center; min-height:98vh; background:#fefefe; padding:20px; box-sizing:border-box;"><div style="width:100%; max-width:800px; border:10px double #000; padding:40px; background:#fffcf5; text-align:center; position:relative; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);"><div style="position:absolute; top:15px; left:15px; width:40px; height:40px; border-top:4px solid #000; border-left:4px solid #000;"></div><div style="position:absolute; top:15px; right:15px; width:40px; height:40px; border-top:4px solid #000; border-right:4px solid #000;"></div><div style="position:absolute; bottom:15px; left:15px; width:40px; height:40px; border-bottom:4px solid #000; border-left:4px solid #000;"></div><div style="position:absolute; bottom:15px; right:15px; width:40px; height:40px; border-bottom:4px solid #000; border-right:4px solid #000;"></div><div style="font-size:24px; font-weight:900; letter-spacing:4px; margin-bottom:20px; text-transform:uppercase;">AiLearning Academy</div><div style="font-size:38px; font-weight:900; color:#000; text-transform:uppercase; margin-bottom:30px; border-bottom:4px solid #000; display:inline-block; padding-bottom:10px; letter-spacing:1px;">SERTIFIKAT KELULUSAN</div><div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Diberikan Kepada</div><div style="font-size:34px; font-weight:900; color:#000; text-decoration:underline; text-transform:capitalize; margin-bottom:25px; font-style:italic;">${studentName}</div><div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Atas Keberhasilannya Menyelesaikan Kelas</div><div style="font-size:26px; font-weight:900; color:#2563eb; margin-bottom:40px; line-height:1.3;">${courseTitle}</div><div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:50px; padding:0 30px;"><div style="text-align:left;"><div style="font-size:12px; font-weight:700; color:#6b7280; text-transform:uppercase;">Tanggal Kelulusan</div><div style="font-size:15px; font-weight:900; color:#000; margin-top:5px;">${formattedDate}</div></div><div style="text-align:center;"><div style="width:120px; height:2px; background:#000; margin-bottom:8px;"></div><div style="font-size:12px; font-weight:900; text-transform:uppercase; color:#000;">Harin AI System</div><div style="font-size:10px; font-weight:700; color:#6b7280;">Verifikasi Resmi</div></div></div><div style="margin-top:40px; font-size:10px; font-weight:700; color:#9ca3af; letter-spacing:1px;">ID Verifikasi: ${certId}</div></div></div>`;
+    const teacherName = course?.profiles?.full_name || course?.instructor || "Harin AI System";
+    const signatureImg = course?.profiles?.signature_url ? `<img src="${course.profiles.signature_url}" style="height:60px; max-width:150px; object-fit:contain; margin-bottom:-10px;" />` : `<div style="height:50px;"></div>`;
+    const content = certificate?.certificate_url ? `<div style="display:flex; justify-content:center; align-items:center; height:100vh; margin:0; padding:0; box-sizing:border-box; background:#1e293b;"><img src="${certificate.certificate_url}" style="max-width:100%; max-height:100%; object-fit:contain; border: 8px solid #000; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);" /></div>` : `<div style="font-family:'Outfit', 'Inter', sans-serif; display:flex; justify-content:center; align-items:center; min-height:98vh; background:#fefefe; padding:20px; box-sizing:border-box;"><div style="width:100%; max-width:800px; border:10px double #000; padding:40px; background:#fffcf5; text-align:center; position:relative; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);"><div style="position:absolute; top:15px; left:15px; width:40px; height:40px; border-top:4px solid #000; border-left:4px solid #000;"></div><div style="position:absolute; top:15px; right:15px; width:40px; height:40px; border-top:4px solid #000; border-right:4px solid #000;"></div><div style="position:absolute; bottom:15px; left:15px; width:40px; height:40px; border-bottom:4px solid #000; border-left:4px solid #000;"></div><div style="position:absolute; bottom:15px; right:15px; width:40px; height:40px; border-bottom:4px solid #000; border-right:4px solid #000;"></div><div style="font-size:24px; font-weight:900; letter-spacing:4px; margin-bottom:20px; text-transform:uppercase;">AiLearning Academy</div><div style="font-size:38px; font-weight:900; color:#000; text-transform:uppercase; margin-bottom:30px; border-bottom:4px solid #000; display:inline-block; padding-bottom:10px; letter-spacing:1px;">SERTIFIKAT KELULUSAN</div><div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Diberikan Kepada</div><div style="font-size:34px; font-weight:900; color:#000; text-decoration:underline; text-transform:capitalize; margin-bottom:25px; font-style:italic;">${studentName}</div><div style="font-size:16px; font-weight:700; color:#4b5563; margin-bottom:10px; text-transform:uppercase; letter-spacing:2px;">Atas Keberhasilannya Menyelesaikan Kelas</div><div style="font-size:26px; font-weight:900; color:#2563eb; margin-bottom:40px; line-height:1.3;">${courseTitle}</div><div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:50px; padding:0 30px;"><div style="text-align:left;"><div style="font-size:12px; font-weight:700; color:#6b7280; text-transform:uppercase;">Tanggal Kelulusan</div><div style="font-size:15px; font-weight:900; color:#000; margin-top:5px;">${formattedDate}</div></div><div style="text-align:center; display:flex; flex-direction:column; align-items:center;">${signatureImg}<div style="width:120px; height:2px; background:#000; margin-bottom:8px;"></div><div style="font-size:12px; font-weight:900; text-transform:uppercase; color:#000;">${teacherName}</div><div style="font-size:10px; font-weight:700; color:#6b7280;">Verifikasi Resmi</div></div></div><div style="margin-top:40px; font-size:10px; font-weight:700; color:#9ca3af; letter-spacing:1px;">ID Verifikasi: ${certId}</div></div></div>`;
     printWindow.document.write(`<html><head><title>Sertifikat - ${studentName}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet"><style>body { margin: 0; padding: 0; background-color: #ffffff; } @media print { body { background: none; } @page { size: landscape; margin: 0; } }</style></head><body>${content}<script>window.onload = function() { setTimeout(function() { window.print(); window.close(); }, 500); };</script></body></html>`);
     printWindow.document.close();
   };
@@ -247,20 +288,37 @@ const CourseLesson = () => {
     else { showToast("Selamat! Anda telah mencapai akhir materi."); navigate(`/courses/${courseId}`); }
   };
 
-  const handleNextLesson = () => { if (!activeLesson.completed) { setShowConfirmNext(true); } else { goToNextLesson(); } };
+  const handleNextLesson = async () => { 
+    if ((activeLesson.type === 'assignment' || activeLesson.type === 'final_project') && !submission) {
+      showToast("Silakan unggah dan kirim file tugas Anda terlebih dahulu sebelum melanjutkan.", "error");
+      return;
+    }
+    if (activeLesson.type === 'final_project') {
+      if (!activeLesson.completed) {
+        await handleToggleLessonCompleted(activeLesson, true);
+      }
+      triggerConfetti();
+      setShowFinalProjectModal(true);
+      return;
+    }
+    if (!activeLesson.completed) { 
+      setShowConfirmNext(true); 
+    } else { 
+      goToNextLesson(); 
+    } 
+  };
   const handleConfirmNext = async (completedThis) => { 
     setShowConfirmNext(false); 
     if (completedThis) { 
-      await handleToggleLessonCompleted(activeLesson); 
+      await handleToggleLessonCompleted(activeLesson, true); 
       goToNextLesson(); 
     } 
-    // If not completed, we don't go to the next lesson
   };
   const handlePrevLesson = () => { setIsVideoPlaying(false); const currentIndex = lessons.findIndex(l => l.id === activeLesson.id); if (currentIndex > 0) { navigate(`/courses/${courseId}/learn/${lessons[currentIndex - 1].id}`); } };
 
   const handleFileChange = (e) => { if (e.target.files && e.target.files[0]) { setSubmissionFile(e.target.files[0]); } };
   const handleSubmitAssignment = async () => {
-    if (!submissionFile) { showToast("Silakan pilih file terlebih dahulu.", "error"); return; }
+    if (!submissionFile) { showToast("Silakan pilih file terlebih dahulu.", "error"); return false; }
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -273,10 +331,16 @@ const CourseLesson = () => {
       const { data: { publicUrl } } = supabase.storage.from('course-content').getPublicUrl(fileName);
       const { data: submissionData, error: dbError } = await supabase.from('submissions').upsert({ student_id: session.user.id, course_id: cleanCourseId, syllabus_id: activeLesson.id, file_url: publicUrl, submitted_at: new Date().toISOString() }).select().single();
       if (dbError) throw dbError;
-      setSubmission(submissionData); showToast("Tugas berhasil dikirim!");
-      // Completion is manual as requested
-    } catch (err) { console.error("Error submitting assignment:", err); showToast("Gagal mengirim tugas: " + err.message, "error"); }
-    finally { setSubmitting(false); }
+      setSubmission(submissionData); 
+      showToast("Tugas berhasil dikirim!");
+      return true;
+    } catch (err) { 
+      console.error("Error submitting assignment:", err); 
+      showToast("Gagal mengirim tugas: " + err.message, "error"); 
+      return false;
+    } finally { 
+      setSubmitting(false); 
+    }
   };
 
   const handleResetCode = () => { setCodeBody(activeLesson.initial_code || "function solution(data) {\n  return data;\n}"); setTerminalOutput(""); };
@@ -319,8 +383,9 @@ const CourseLesson = () => {
               
               const logStr = logs.length > 0 ? `[Log]: ${logs.join(' | ')}` : "No logs";
               const isMatch = JSON.stringify(actual) === JSON.stringify(expected);
+              const actualString = actual === undefined ? 'undefined' : (Number.isNaN(actual) ? 'NaN' : JSON.stringify(actual));
               
-              output += `TEST ${idx + 1} | Input: ${tc.input} | ${logStr} | Result: ${JSON.stringify(actual)}\n`;
+              output += `TEST ${idx + 1} | Input: ${tc.input} | ${logStr} | Result: ${actualString}\n`;
               
               if (isMatch) {
                 testResults += `✅ Test ${idx + 1}: Passed\n`;
@@ -335,11 +400,12 @@ const CourseLesson = () => {
           });
           
           setTerminalOutput(output + "\nSTATUS PENGUJIAN:\n" + testResults);
-          if (allPassed) showToast("Pengujian berhasil! Klik 'Kirim Jawaban' untuk mengumpulkan.");
+          if (allPassed) showToast("Pengujian berhasil! Klik 'Kirim & Tandai Selesai' untuk mengumpulkan.");
         } else {
           logs = [];
           const actual = runContext(null, customConsole);
-          output = (logs.length > 0 ? logs.join('\n') + '\n' : '') + "Result: " + JSON.stringify(actual);
+          const actualString = actual === undefined ? 'undefined' : (Number.isNaN(actual) ? 'NaN' : JSON.stringify(actual));
+          output = (logs.length > 0 ? logs.join('\n') + '\n' : '') + "Result: " + actualString;
           setTerminalOutput(output);
         }
       } catch (err) { 
@@ -365,12 +431,31 @@ const CourseLesson = () => {
       
       if (dbError) throw dbError;
       showToast("Jawaban coding berhasil dikirim!");
-      // Completion is manual as requested
+      return true;
     } catch (err) { 
       console.error("Error submitting coding task:", err); 
       showToast("Gagal mengirim jawaban: " + err.message, "error"); 
+      return false;
     } finally { 
       setSubmitting(false); 
+    }
+  };
+
+  const handleCombinedSubmitAndComplete = async () => {
+    if (activeLesson.type === 'interactive') {
+      const success = await handleSubmitCodingTask();
+      if (success) {
+        await handleToggleLessonCompleted(activeLesson, true);
+      }
+    } else if (activeLesson.type === 'assignment' || activeLesson.type === 'final_project') {
+      const success = await handleSubmitAssignment();
+      if (success) {
+        await handleToggleLessonCompleted(activeLesson, true);
+        if (activeLesson.type === 'final_project') {
+          triggerConfetti();
+          setShowFinalProjectModal(true);
+        }
+      }
     }
   };
 
@@ -379,12 +464,36 @@ const CourseLesson = () => {
 
   return (
     <div className="bg-background text-on-background font-body-md flex h-screen overflow-hidden">
-      <aside className="w-80 bg-surface border-r-2 border-on-background shadow-[4px_0px_0px_0px_rgba(0,0,0,1)] z-20 flex flex-col shrink-0">
+      {showMobileLessons && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setShowMobileLessons(false)}
+        />
+      )}
+      <aside className={`
+        fixed md:relative inset-y-0 left-0 z-40 md:z-20
+        w-80 bg-surface border-r-2 border-on-background shadow-[4px_0px_0px_0px_rgba(0,0,0,1)] flex flex-col shrink-0 transition-transform duration-300 ease-in-out
+        ${showMobileLessons ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
         <div className="p-5 border-b-2 border-on-background bg-surface-container-low flex flex-col gap-4">
           <Link to={`/courses/${courseId}`} className="inline-flex items-center gap-2 text-xs font-bold text-primary hover:text-primary-container-variant transition-colors group"><Icon name="arrow_back" className="w-4 h-4 transition-transform group-hover:-translate-x-1" /><span>Kembali ke Detail Kursus</span></Link>
           <div><span className="text-[9px] uppercase font-black tracking-widest text-on-surface-variant/80">MATERI BELAJAR</span><h2 className="font-headline-sm text-lg font-black text-on-surface mt-1 leading-snug line-clamp-2">{course.title}</h2></div>
           <div className="space-y-1.5 pt-1"><div className="flex justify-between items-center text-xs font-bold text-on-surface-variant"><span>Progres Kelas</span><span className="text-primary font-black">{enrollmentProgress}%</span></div><div className="w-full bg-white border-2 border-on-background rounded-full h-3 overflow-hidden"><div className="bg-primary h-full transition-all" style={{ width: `${enrollmentProgress}%` }} /></div>
-          {enrollmentProgress === 100 && (<button onClick={() => { triggerConfetti(); setShowCompletionModal(true); }} className="mt-2.5 w-full py-2 bg-[#FFB800] hover:bg-[#e6a500] text-on-background border-2 border-on-background rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer"><Icon name="workspace_premium" className="w-4 h-4" />Lihat Sertifikat</button>)}
+          {enrollmentProgress === 100 && (
+            certificate ? (
+              <button 
+                onClick={() => { triggerConfetti(); setShowCompletionModal(true); }} 
+                className="mt-2.5 w-full py-2 bg-[#FFB800] hover:bg-[#e6a500] text-on-background border-2 border-on-background rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer"
+              >
+                <Icon name="workspace_premium" className="w-4 h-4" />
+                Lihat Sertifikat
+              </button>
+            ) : (
+              <div className="mt-2.5 w-full py-2 bg-surface-container text-on-surface-variant border-2 border-dashed border-on-background rounded-xl font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 select-none">
+                ⏳ Sertifikat Diproses Guru
+              </div>
+            )
+          )}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-surface-container-lowest">
@@ -429,13 +538,20 @@ const CourseLesson = () => {
         </div>
       </aside>
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-surface-bright">
-        <header className="h-16 bg-surface border-b-2 border-on-background shadow-[0px_2px_0px_0px_rgba(0,0,0,1)] flex items-center px-6 justify-between shrink-0"><div className="flex items-center gap-3"><Icon name="menu_book" className="w-6 h-6 text-primary" /><h1 className="font-headline-md font-black text-on-surface truncate">{activeLesson.title}</h1></div>
-          <div className="flex gap-2">
-            <button onClick={handlePrevLesson} disabled={lessons.findIndex(l => l.id === activeLesson.id) === 0} className="p-2 border-2 border-on-background rounded-lg hover:bg-surface-container transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Icon name="chevron_left" className="w-5 h-5" /></button>
-            <button onClick={handleNextLesson} className="p-2 border-2 border-on-background rounded-lg hover:bg-surface-container transition-all"><Icon name="chevron_right" className="w-5 h-5" /></button>
+        <header className="h-16 bg-surface border-b-2 border-on-background shadow-[0px_2px_0px_0px_rgba(0,0,0,1)] flex items-center px-6 justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button 
+              onClick={() => setShowMobileLessons(true)}
+              className="p-1.5 md:hidden border-2 border-on-background rounded-lg hover:bg-surface-container transition-all flex items-center justify-center shrink-0"
+              title="Daftar Materi"
+            >
+              <Icon name="menu" className="w-5 h-5" />
+            </button>
+            <Icon name="menu_book" className="w-6 h-6 text-primary hidden sm:block shrink-0" />
+            <h1 className="font-headline-md font-black text-on-surface truncate text-sm sm:text-base">{activeLesson.title}</h1>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 lg:px-20 max-w-5xl mx-auto w-full space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 lg:px-20 max-w-5xl mx-auto w-full space-y-8">
           {activeLesson.type === 'video' ? (
             isVideoPlaying && activeLesson.video_url ? (<div className="aspect-video w-full bg-black border-4 border-on-background rounded-2xl overflow-hidden relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"><iframe className="w-full h-full animate-in fade-in zoom-in-95 duration-350" src={`${getEmbedUrl(activeLesson.video_url)}?autoplay=1&rel=0`} title={activeLesson.title} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>) : (<div className="aspect-video w-full bg-black border-4 border-on-background rounded-2xl overflow-hidden relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center group"><div className="absolute inset-0 bg-cover bg-center opacity-60 filter blur-sm" style={{ backgroundImage: `url(${course?.image_url})` }} /><div className="relative z-10 flex flex-col items-center gap-4"><button onClick={() => setIsVideoPlaying(true)} className="w-20 h-20 bg-primary text-white rounded-full border-4 border-on-background flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 active:scale-95 transition-all"><Icon name="play_arrow" className="w-12 h-12 fill-current" /></button><span className="text-sm font-black bg-black/80 text-white px-4 py-1.5 rounded-full uppercase tracking-wider">Putar Video</span></div></div>)
           ) : activeLesson.type === 'assignment' || activeLesson.type === 'final_project' ? (
@@ -444,7 +560,27 @@ const CourseLesson = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="bg-white border-2 border-on-background p-4 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"><span className="text-[10px] uppercase font-black tracking-widest text-on-surface-variant/80">WAKTU PENGERJAAN</span><p className="font-headline-sm text-sm font-black text-on-surface mt-1">Flexible (Kapan Saja)</p></div><div className="bg-white border-2 border-on-background p-4 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"><span className="text-[10px] uppercase font-black tracking-widest text-on-surface-variant/80">FORMAT FILE</span><p className="font-headline-sm text-sm font-black text-on-surface mt-1">{activeLesson.allowed_file_types || 'pdf, docx, zip, png, jpg'}</p></div></div>
               <div className="bg-white border-2 border-on-background p-4 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] mt-2"><span className="text-[10px] uppercase font-black tracking-widest text-on-surface-variant/80 block mb-2">PANDUAN TUGAS</span><p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">{activeLesson.assignment_text || 'Silakan ikuti instruksi.'}</p></div>
               <div className="bg-white border-2 border-on-background p-6 rounded-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] mt-2">
-                {submission ? (<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-green-50 border-2 border-green-600 rounded-lg"><div className="min-w-0 flex-1"><p className="text-sm font-black text-green-800 flex items-center gap-1.5"><Icon name="check_circle" className="w-5 h-5 text-green-600" />Tugas Terkirim</p><a href={submission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline font-bold mt-1 block truncate">Lihat file: {submission.file_url.split('/').pop()}</a></div><label className="cursor-pointer px-4 py-2 bg-white text-green-700 font-label-bold text-xs rounded-lg border-2 border-green-600 hover:bg-green-50 transition-all text-center flex-shrink-0">Kirim Ulang<input type="file" className="hidden" onChange={handleFileChange} /></label></div>) : (<div className="flex flex-col gap-4"><div className="border-4 border-dashed border-on-background/20 rounded-xl p-6 text-center bg-surface-container-lowest"><Icon name="cloud_upload" className="w-10 h-10 mx-auto text-on-surface-variant/40 mb-2" /><p className="text-xs font-bold text-on-surface-variant">{submissionFile ? submissionFile.name : 'Pilih file tugas'}</p><input type="file" id="assignment-file-input" className="hidden" onChange={handleFileChange} /><button onClick={() => document.getElementById('assignment-file-input').click()} className="mt-3 px-4 py-2 bg-surface-container text-on-surface font-label-bold text-xs rounded-lg border-2 border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">Pilih File</button></div>{submissionFile && (<button onClick={handleSubmitAssignment} disabled={submitting} className="w-full py-3 bg-tertiary text-on-tertiary font-headline-md rounded-lg border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all text-center uppercase tracking-wider text-xs font-black disabled:opacity-50">{submitting ? 'Mengirim...' : 'Kirim Tugas Sekarang'}</button>)}</div>)}
+                {submission ? (
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-green-50 border-2 border-green-600 rounded-lg">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-green-800 flex items-center gap-1.5"><Icon name="check_circle" className="w-5 h-5 text-green-600" />Tugas Terkirim</p>
+                      <a href={submission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline font-bold mt-1 block truncate">Lihat file: {submission.file_url.split('/').pop()}</a>
+                    </div>
+                    <label className="cursor-pointer px-4 py-2 bg-white text-green-700 font-label-bold text-xs rounded-lg border-2 border-green-600 hover:bg-green-50 transition-all text-center flex-shrink-0">
+                      Ubah File / Kirim Ulang
+                      <input type="file" className="hidden" onChange={handleFileChange} />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="border-4 border-dashed border-on-background/20 rounded-xl p-6 text-center bg-surface-container-lowest">
+                      <Icon name="cloud_upload" className="w-10 h-10 mx-auto text-on-surface-variant/40 mb-2" />
+                      <p className="text-xs font-bold text-on-surface-variant">{submissionFile ? submissionFile.name : 'Pilih file tugas'}</p>
+                      <input type="file" id="assignment-file-input" className="hidden" onChange={handleFileChange} />
+                      <button onClick={() => document.getElementById('assignment-file-input').click()} className="mt-3 px-4 py-2 bg-surface-container text-on-surface font-label-bold text-xs rounded-lg border-2 border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">Pilih File</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : activeLesson.type === 'interactive' ? (
@@ -454,16 +590,8 @@ const CourseLesson = () => {
                   <div className="flex gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="w-3 h-3 rounded-full bg-yellow-500"></span><span className="w-3 h-3 rounded-full bg-green-500"></span></div>
                   <h4 className="font-mono text-sm text-gray-400 font-bold">interactive.js</h4>
                 </div>
-                {activeLesson.completed ? (
+                {activeLesson.completed && (
                   <span className="text-[10px] font-black text-green-400 uppercase flex items-center gap-1"><Icon name="check_circle" className="w-3 h-3" /> Terkirim</span>
-                ) : (
-                  <button 
-                    onClick={handleSubmitCodingTask}
-                    disabled={submitting}
-                    className="px-4 py-1.5 bg-primary text-white text-[10px] font-black rounded-lg border-2 border-white shadow-[2px_2px_0px_0px_#fff] hover:translate-y-0.5 active:shadow-none transition-all disabled:opacity-50"
-                  >
-                    {submitting ? 'Mengirim...' : 'Kirim Jawaban'}
-                  </button>
                 )}
               </div>
               <div className="flex-1 font-mono text-sm text-green-400 flex flex-col">
@@ -489,18 +617,150 @@ const CourseLesson = () => {
               </div>
             </div>
           ) : (<div className="w-full h-48 bg-secondary-container border-4 border-on-background rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center overflow-hidden relative"><Icon name="menu_book" className="w-24 h-24 text-secondary/20 absolute -right-4 -bottom-4" /><div className="text-center relative z-10 p-6"><h4 className="font-headline-lg text-on-secondary-container">Bahan Bacaan</h4><p className="text-on-secondary-container/80 mt-2">Baca materi teks di bawah.</p></div></div>)}
-          {activeLesson.type !== 'assignment' && (<div className="bg-white border-2 border-on-background rounded-xl p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><h3 className="font-headline-md text-2xl mb-6">Materi: {activeLesson.title}</h3><div className="prose max-w-none text-on-surface-variant font-body-md"><RichMaterialRenderer content={activeLesson.content} /></div></div>)}
-          <div className="flex justify-between items-center py-6 border-t-2 border-on-background">
+          {activeLesson.type !== 'assignment' && activeLesson.type !== 'final_project' && !activeLesson.assignment_text && (<div className="bg-white border-2 border-on-background rounded-xl p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><h3 className="font-headline-md text-2xl mb-6">Materi: {activeLesson.title}</h3><div className="prose max-w-none text-on-surface-variant font-body-md"><RichMaterialRenderer content={activeLesson.content} /></div></div>)}
+          <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center py-6 border-t-2 border-on-background">
             <button onClick={handlePrevLesson} disabled={lessons.findIndex(l => l.id === activeLesson.id) === 0} className="px-6 py-3 font-label-bold text-on-surface border-2 border-on-background rounded-lg hover:bg-surface-container transition-all disabled:opacity-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">Materi Sebelumnya</button>
-            <div className="flex gap-4">
-              <button onClick={() => handleToggleLessonCompleted(activeLesson)} className={`px-6 py-3 font-headline-md rounded-lg border-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2 ${activeLesson.completed ? 'bg-surface-container text-on-surface' : 'bg-tertiary text-on-tertiary'}`}><Icon name={activeLesson.completed ? 'close' : 'check_circle'} className="w-5 h-5" />{activeLesson.completed ? 'Batalkan Selesai' : 'Tandai Selesai'}</button>
-              <button onClick={handleNextLesson} className="px-6 py-3 bg-primary text-white font-headline-md rounded-lg border-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2">Materi Selanjutnya <Icon name="arrow_forward" className="w-5 h-5" /></button>
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              {(activeLesson.type === 'interactive' || activeLesson.type === 'assignment' || activeLesson.type === 'final_project') ? (
+                activeLesson.completed ? (
+                  <button 
+                    onClick={() => handleToggleLessonCompleted(activeLesson, false)} 
+                    className="px-6 py-3 font-headline-md rounded-lg border-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2 bg-surface-container text-on-surface"
+                  >
+                    <Icon name="close" className="w-5 h-5" />
+                    Batalkan Selesai
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleCombinedSubmitAndComplete} 
+                    disabled={submitting}
+                    className="px-6 py-3 bg-tertiary text-on-tertiary font-headline-md rounded-lg border-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Icon name="cloud_upload" className="w-5 h-5" />
+                    {submitting ? 'Mengirim...' : 'Kirim & Tandai Selesai'}
+                  </button>
+                )
+              ) : (
+                <button 
+                  onClick={() => handleToggleLessonCompleted(activeLesson)} 
+                  className={`px-6 py-3 font-headline-md rounded-lg border-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2 ${activeLesson.completed ? 'bg-surface-container text-on-surface' : 'bg-tertiary text-on-tertiary'}`}
+                >
+                  <Icon name={activeLesson.completed ? 'close' : 'check_circle'} className="w-5 h-5" />
+                  {activeLesson.completed ? 'Batalkan Selesai' : 'Tandai Selesai'}
+                </button>
+              )}
+              <button 
+                onClick={handleNextLesson} 
+                className="px-6 py-3 bg-primary text-white font-headline-md rounded-lg border-2 border-on-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+              >
+                {activeLesson.type === 'final_project' ? 'Selesai' : 'Materi Selanjutnya'}
+                <Icon name={activeLesson.type === 'final_project' ? 'check' : 'arrow_forward'} className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>
       </main>
       {showConfirmNext && (<div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white border-4 border-on-background rounded-2xl p-6 max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-150"><h3 className="font-headline-md text-xl font-black text-on-surface mb-4">Selesaikan Modul?</h3><p className="text-on-surface-variant mb-6">Apakah Anda sudah menyelesaikan modul "{activeLesson?.title}"?</p><div className="flex gap-3"><button onClick={() => handleConfirmNext(true)} className="flex-1 px-5 py-3 bg-tertiary text-on-tertiary font-headline-md rounded-lg border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all">Sudah Selesai</button><button onClick={() => handleConfirmNext(false)} className="flex-1 px-5 py-3 bg-surface-container text-on-surface font-headline-md rounded-lg border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all">Belum Selesai</button></div></div></div>)}
-      {showCompletionModal && (<div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white border-4 border-on-background rounded-3xl p-6 max-w-2xl w-full shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-200 flex flex-col items-center gap-6 relative"><button onClick={() => setShowCompletionModal(false)} className="absolute top-4 right-4 p-1.5 hover:bg-surface-variant rounded-lg border-2 border-on-background bg-white"><Icon name="close" className="w-5 h-5" /></button><div className="text-center space-y-1"><div className="text-5xl animate-bounce">🏆</div><h3 className="font-headline-lg text-3xl font-black text-on-surface">KURSUS SELESAI!</h3><p className="text-on-surface-variant font-bold text-sm">Selamat! Anda telah menyelesaikan semua modul dalam kelas ini.</p></div><div className="w-full border-4 border-double border-on-background p-6 rounded-2xl bg-[#fffcf5] flex flex-col items-center justify-center shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"><h4 className="text-2xl font-black text-on-surface uppercase border-b-4 border-on-background pb-1 mb-5">Sertifikat Kelulusan</h4><p className="text-3xl font-black text-primary underline italic capitalize mb-5">{profile?.full_name || "Pelajar Premium"}</p><p className="text-base font-black text-on-surface text-center mb-8">{course?.title}</p></div><div className="flex gap-3 w-full"><button onClick={handlePrintCertificate} className="flex-1 py-3 px-4 bg-primary text-white font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2 cursor-pointer"><Icon name="print" className="w-5 h-5" />Cetak Sertifikat</button><button onClick={() => setShowCompletionModal(false)} className="flex-1 py-3 px-4 bg-surface-container text-on-surface font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer">Tutup</button></div></div></div>)}
+      {showCompletionModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white border-4 border-on-background rounded-3xl p-6 max-w-2xl w-full shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-200 flex flex-col items-center gap-6 relative">
+            <button onClick={() => setShowCompletionModal(false)} className="absolute top-4 right-4 p-1.5 hover:bg-surface-variant rounded-lg border-2 border-on-background bg-white">
+              <Icon name="close" className="w-5 h-5" />
+            </button>
+            <div className="text-center space-y-1">
+              <div className="text-5xl animate-bounce">🏆</div>
+              <h3 className="font-headline-lg text-3xl font-black text-on-surface">KURSUS SELESAI!</h3>
+              <p className="text-on-surface-variant font-bold text-sm">Selamat! Anda telah menyelesaikan semua modul dalam kelas ini.</p>
+            </div>
+            
+            {/* New Certificate Template Preview */}
+            <div className="w-full max-w-2xl border-4 border-on-surface bg-[#fffcf5] p-6 md:p-10 text-center relative shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] font-sans" style={{ borderStyle: 'double', borderWidth: '10px' }}>
+              <div className="absolute top-3 left-3 w-8 h-8 border-t-2 border-l-2 border-on-surface border-t-black border-l-black"></div>
+              <div className="absolute top-3 right-3 w-8 h-8 border-t-2 border-right-2 border-on-surface border-t-black border-r-black"></div>
+              <div className="absolute bottom-3 left-3 w-8 h-8 border-b-2 border-l-2 border-on-surface border-b-black border-l-black"></div>
+              <div className="absolute bottom-3 right-3 w-8 h-8 border-b-2 border-right-2 border-on-surface border-b-black border-r-black"></div>
+              
+              <div className="text-[12px] md:text-sm font-black tracking-widest text-on-surface-variant/80 uppercase mb-2">AiLearning Academy</div>
+              <div className="text-xl md:text-3xl font-black text-on-surface border-b-2 border-on-surface inline-block pb-1 mb-4 uppercase">SERTIFIKAT KELULUSAN</div>
+              
+              <div className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Diberikan Kepada</div>
+              <div className="text-lg md:text-2xl font-black text-on-surface underline italic mb-4 capitalize">
+                {profile?.full_name || profile?.fullName || "Pelajar Premium"}
+              </div>
+              
+              <div className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Atas Keberhasilannya Menyelesaikan Kelas</div>
+              <div className="text-sm md:text-lg font-black text-primary leading-tight mb-6">
+                {course?.title || "Kelas AiLearning"}
+              </div>
+              
+              <div className="flex justify-between items-end mt-4 md:mt-8 px-2 text-left">
+                <div>
+                  <div className="text-[8px] md:text-[10px] font-bold text-on-surface-variant uppercase">Tanggal Kelulusan</div>
+                  <div className="text-[10px] md:text-xs font-black text-on-surface mt-0.5">
+                    {certificate?.issued_at ? new Date(certificate.issued_at).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    }) : 'Baru saja'}
+                  </div>
+                </div>
+                <div className="text-center flex flex-col items-center">
+                  {course?.profiles?.signature_url && (
+                    <img 
+                      src={course.profiles.signature_url} 
+                      alt="Tanda Tangan Pengajar" 
+                      className="h-8 md:h-12 mx-auto object-contain -mb-2" 
+                    />
+                  )}
+                  <div className="w-16 md:w-24 h-0.5 bg-on-surface mb-1"></div>
+                  <div className="text-[8px] md:text-[10px] font-black uppercase text-on-surface">
+                    {course?.profiles?.full_name || course?.instructor || "Harin AI System"}
+                  </div>
+                  <div className="text-[6px] md:text-[8px] font-bold text-on-surface-variant">Verifikasi Resmi</div>
+                </div>
+              </div>
+              <div className="mt-4 md:mt-6 text-[8px] font-bold text-on-surface-variant/60 tracking-wider">
+                ID: CERT-{(certificate?.id && String(certificate.id).startsWith('cert-') ? certificate.id.replace('cert-', '') : certificate?.id || 'ONLINE').toUpperCase()}-{String(profile?.id || 'GUEST').slice(0, 8).toUpperCase()}
+              </div>
+            </div>
+
+            <div className="flex gap-3 w-full">
+              <button onClick={handlePrintCertificate} className="flex-1 py-3 px-4 bg-[#FFB800] hover:bg-[#e6a500] text-on-background font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2 cursor-pointer">
+                <Icon name="print" className="w-5 h-5" />
+                Cetak Sertifikat
+              </button>
+              <button onClick={() => setShowCompletionModal(false)} className="flex-1 py-3 px-4 bg-surface-container text-on-surface font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer">
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showFinalProjectModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white border-4 border-on-background rounded-3xl p-8 max-w-md w-full shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-200 flex flex-col items-center text-center gap-6 relative animate-in fade-in-50">
+            <button onClick={() => setShowFinalProjectModal(false)} className="absolute top-4 right-4 p-1.5 hover:bg-surface-variant rounded-lg border-2 border-on-background bg-white">
+              <Icon name="close" className="w-5 h-5" />
+            </button>
+            <div className="text-6xl animate-bounce">🎉</div>
+            <div className="space-y-2">
+              <h3 className="font-headline-lg text-2xl font-black text-on-surface">Selamat!</h3>
+              <p className="text-on-surface-variant font-bold text-sm leading-relaxed">
+                Anda telah menyelesaikan seluruh materi dan mengumpulkan Tugas Akhir (Final Project) kelas ini. 
+                <br /><br />
+                Harap tunggu guru untuk memeriksa pekerjaan Anda. Sertifikat akan diberikan oleh guru setelah tugas dinyatakan lulus.
+              </p>
+            </div>
+            <button 
+              onClick={() => navigate('/')} 
+              className="w-full py-3 bg-primary text-white font-black rounded-xl border-2 border-on-background shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all hover:bg-primary-container-variant cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Icon name="dashboard" className="w-5 h-5" />
+              Kembali ke Dashboard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -45,6 +45,22 @@ const CourseDetail = () => {
   const [enrollmentId, setEnrollmentId] = useState(null);
   const [userCertificate, setUserCertificate] = useState(null);
   const [showCertPreview, setShowCertPreview] = useState(false);
+  const [previewItem, setPreviewItem] = useState(null); // for locked item preview modal
+
+  // Compute all syllabus items in order across sections
+  const allSyllabusOrdered = sections.flatMap(s => s.course_syllabus || []);
+
+  // Returns true if the item at `index` in allSyllabusOrdered is locked
+  // (i.e., some item before it in the course is not yet completed)
+  const isSyllabusLocked = (sylId) => {
+    const idx = allSyllabusOrdered.findIndex(s => s.id === sylId);
+    if (idx <= 0) return false; // first item is never locked
+    for (let i = 0; i < idx; i++) {
+      const prevLesson = lessons.find(l => l.id === allSyllabusOrdered[i].id);
+      if (!prevLesson?.completed) return true;
+    }
+    return false;
+  };
 
 
   const handlePrintCertificate = (cert) => {
@@ -60,6 +76,9 @@ const CourseDetail = () => {
     
     const rawId = cert.id && String(cert.id).startsWith('cert-') ? cert.id.replace('cert-', '') : cert.id;
     const certId = `CERT-${rawId || 'ONLINE'}-${String(profile?.id || 'GUEST').slice(0, 8).toUpperCase()}`;
+
+    const teacherName = course?.profiles?.full_name || course?.instructor || "Harin AI System";
+    const signatureImg = course?.profiles?.signature_url ? `<img src="${course.profiles.signature_url}" style="height:60px; max-width:150px; object-fit:contain; margin-bottom:-10px;" />` : `<div style="height:50px;"></div>`;
 
     const content = `
       <div style="font-family:'Outfit', 'Inter', sans-serif; display:flex; justify-content:center; align-items:center; min-height:98vh; background:#fefefe; padding:20px; box-sizing:border-box;">
@@ -83,9 +102,10 @@ const CourseDetail = () => {
               <div style="font-size:12px; font-weight:700; color:#6b7280; text-transform:uppercase;">Tanggal Kelulusan</div>
               <div style="font-size:15px; font-weight:900; color:#000; margin-top:5px;">${formattedDate}</div>
             </div>
-            <div style="text-align:center;">
+            <div style="text-align:center; display:flex; flex-direction:column; align-items:center;">
+              ${signatureImg}
               <div style="width:120px; height:2px; background:#000; margin-bottom:8px;"></div>
-              <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:#000;">Harin AI System</div>
+              <div style="font-size:12px; font-weight:900; text-transform:uppercase; color:#000;">${teacherName}</div>
               <div style="font-size:10px; font-weight:700; color:#6b7280;">Verifikasi Resmi</div>
             </div>
           </div>
@@ -143,16 +163,44 @@ const CourseDetail = () => {
       if (courseError) throw courseError;
 
       if (courseData) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUserId = session?.user?.id;
+
+        let hasAccess = true;
+        if (courseData.status === 'draft') {
+          const isInstructor = currentUserId && (currentUserId === courseData.instructor_id);
+          
+          let isCollaborator = false;
+          const { data: collabData } = await supabase
+            .from('course_collaborators')
+            .select('teacher_id')
+            .eq('course_id', id)
+            .eq('status', 'accepted');
+          if (collabData && currentUserId) {
+            isCollaborator = collabData.some(c => c.teacher_id === currentUserId);
+          }
+          
+          if (!isInstructor && !isCollaborator) {
+            hasAccess = false;
+          }
+        }
+
+        if (!hasAccess) {
+          setCourse(null);
+          setLoading(false);
+          return;
+        }
+
         let instructorData = null;
         if (courseData.instructor_id) {
           const { data: instData } = await supabase
-            .from('profiles').select('full_name, avatar_url').eq('id', courseData.instructor_id).maybeSingle();
+            .from('profiles').select('full_name, avatar_url, signature_url').eq('id', courseData.instructor_id).maybeSingle();
           instructorData = instData;
         }
 
         if (!instructorData && courseData.instructor) {
           const { data: fallbackData } = await supabase
-            .from('profiles').select('full_name, avatar_url').ilike('full_name', courseData.instructor).limit(1).maybeSingle();
+            .from('profiles').select('full_name, avatar_url, signature_url').ilike('full_name', courseData.instructor).limit(1).maybeSingle();
           if (fallbackData) instructorData = fallbackData;
         }
         
@@ -213,7 +261,7 @@ const CourseDetail = () => {
           }
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
+        // Reuse previously fetched session
         if (session) {
           const { data: enrollment } = await supabase
             .from('enrollments').select('id, progress, enrolled_at').eq('user_id', session.user.id).eq('course_id', id).maybeSingle();
@@ -382,18 +430,33 @@ const CourseDetail = () => {
     return (
       <div className="space-y-2">
         {lines.map((line, idx) => {
+          const leadingSpacesMatch = line.match(/^(\s*)/);
+          const spaceCount = leadingSpacesMatch ? leadingSpacesMatch[1].length : 0;
+          const indentLevel = Math.floor(spaceCount / 2); // 2 spaces per indent level
+          
           let trimmed = line.trim();
           if (!trimmed) return <div key={idx} className="h-2" />;
+          
+          const indentStyle = { paddingLeft: `${indentLevel * 1.5 + 0.5}rem` };
+
           if (trimmed.startsWith('###')) {
-            return <h4 key={idx} className="text-md font-black text-on-surface mt-4 mb-2">{trimmed.replace('###', '').trim()}</h4>;
+            return (
+              <h4 key={idx} style={indentStyle} className="text-md font-black text-on-surface mt-4 mb-2">
+                {trimmed.replace('###', '').trim()}
+              </h4>
+            );
           }
           if (trimmed.startsWith('##')) {
-            return <h3 key={idx} className="text-lg font-black text-on-surface mt-4 mb-2">{trimmed.replace('##', '').trim()}</h3>;
-          }
-          if (trimmed.startsWith('•') || trimmed.startsWith('*') || trimmed.startsWith('-')) {
-            const cleanText = trimmed.replace(/^[•*\-]\s*/, '');
             return (
-              <div key={idx} className="flex gap-2 items-start pl-2">
+              <h3 key={idx} style={indentStyle} className="text-lg font-black text-on-surface mt-4 mb-2">
+                {trimmed.replace('##', '').trim()}
+              </h3>
+            );
+          }
+          if (trimmed.startsWith('•') || trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+            const cleanText = trimmed.replace(/^(•|\*\s+|\-\s+)/, '');
+            return (
+              <div key={idx} style={indentStyle} className="flex gap-2 items-start">
                 <span className="text-primary font-black mt-0.5">•</span>
                 <span className="flex-1">{parseInlineStyles(cleanText)}</span>
               </div>
@@ -404,13 +467,17 @@ const CourseDetail = () => {
             const num = numMatch[1];
             const cleanText = numMatch[2];
             return (
-              <div key={idx} className="flex gap-2 items-start pl-2">
+              <div key={idx} style={indentStyle} className="flex gap-2 items-start">
                 <span className="text-primary font-black min-w-[16px] text-right">{num}.</span>
                 <span className="flex-1">{parseInlineStyles(cleanText)}</span>
               </div>
             );
           }
-          return <p key={idx} className="leading-relaxed">{parseInlineStyles(trimmed)}</p>;
+          return (
+            <p key={idx} style={indentStyle} className="leading-relaxed">
+              {parseInlineStyles(trimmed)}
+            </p>
+          );
         })}
       </div>
     );
@@ -479,13 +546,19 @@ const CourseDetail = () => {
                       {enrollmentProgress === 100 ? 'Pelajari Kembali' : 'Lanjutkan Belajar'}
                     </button>
                     {enrollmentProgress === 100 && (
-                      <button 
-                        onClick={() => setShowCertPreview(true)}
-                        className="px-8 py-4 bg-[#FFB800] text-on-background rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1 flex items-center justify-center gap-2"
-                      >
-                        <Icon name="workspace_premium" className="w-6 h-6" />
-                        Lihat Sertifikat
-                      </button>
+                      userCertificate && !userCertificate.isAutoGenerated ? (
+                        <button 
+                          onClick={() => setShowCertPreview(true)}
+                          className="px-8 py-4 bg-[#FFB800] text-on-background rounded-lg border-2 border-on-background font-headline-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all active:scale-95 flex-1 flex items-center justify-center gap-2"
+                        >
+                          <Icon name="workspace_premium" className="w-6 h-6" />
+                          Lihat Sertifikat
+                        </button>
+                      ) : (
+                        <div className="px-6 py-4 bg-surface-container text-on-surface-variant border-2 border-dashed border-on-background rounded-lg font-headline-md flex-1 flex items-center justify-center gap-2 text-center text-xs font-black select-none">
+                          ⏳ Sertifikat Diproses Guru
+                        </div>
+                      )
                     )}
                   </>
                 ) : (
@@ -566,6 +639,7 @@ const CourseDetail = () => {
                         <div className="space-y-3 pl-2 border-l-4 border-on-surface/10 ml-4">
                           {section.course_syllabus?.map((syl) => {
                             const isCompleted = lessons.find(l => l.id === syl.id)?.completed;
+                            const isLocked = !isCompleted && isSyllabusLocked(syl.id);
                             const isAssignment = syl.type === 'assignment' || 
                                                  syl.type === 'final_project' || 
                                                  !!syl.assignment_text;
@@ -573,24 +647,46 @@ const CourseDetail = () => {
                                              syl.type === 'interactive' || 
                                              (syl.initial_code && syl.test_cases);
                             
+                            const handleItemClick = () => {
+                              if (isLocked) {
+                                setPreviewItem(syl);
+                              } else {
+                                navigate(`/courses/${id}/learn`);
+                              }
+                            };
+
                             return (
                               <div 
                                 key={syl.id}
-                                onClick={() => navigate(`/courses/${id}/learn/${syl.id}`)}
-                                className={`group border-2 border-on-background p-4 rounded-xl flex items-center justify-between gap-4 cursor-pointer hover:bg-primary-container/20 transition-all ${isCompleted ? 'bg-surface-container-low opacity-80' : 'bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'} ${isAssignment ? 'bg-secondary-container/5 border-secondary/30' : ''}`}
+                                onClick={handleItemClick}
+                                className={`group border-2 p-4 rounded-xl flex items-center justify-between gap-4 transition-all
+                                  ${isLocked 
+                                    ? 'bg-surface-container-low/50 border-on-background/30 cursor-not-allowed opacity-70' 
+                                    : isCompleted 
+                                      ? 'bg-surface-container-low opacity-80 border-on-background cursor-pointer hover:bg-primary-container/20'
+                                      : `bg-white border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-primary-container/20 ${isAssignment ? 'bg-secondary-container/5 border-secondary/30' : ''}`
+                                  }`}
                               >
                                 <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-lg border-2 border-on-background flex items-center justify-center ${isCompleted ? 'bg-tertiary-container text-on-tertiary-container' : isAssignment ? 'bg-secondary-container text-secondary' : 'bg-surface-container text-on-surface'}`}>
-                                    <Icon name={isCompleted ? 'check' : isAssignment ? 'assignment' : isCoding ? 'code' : (syl.video_url ? 'play_circle' : 'menu_book')} className="w-5 h-5" />
+                                  <div className={`w-10 h-10 rounded-lg border-2 border-on-background flex items-center justify-center ${
+                                    isCompleted ? 'bg-tertiary-container text-on-tertiary-container' 
+                                    : isLocked ? 'bg-surface-container text-on-surface-variant'
+                                    : isAssignment ? 'bg-secondary-container text-secondary' 
+                                    : 'bg-surface-container text-on-surface'
+                                  }`}>
+                                    <Icon name={isCompleted ? 'check' : isLocked ? 'lock' : isAssignment ? 'assignment' : isCoding ? 'code' : (syl.video_url ? 'play_circle' : 'menu_book')} className="w-5 h-5" />
                                   </div>
                                   <div>
-                                    <h4 className="font-label-bold text-on-surface group-hover:text-primary transition-colors text-sm md:text-base">{syl.title}</h4>
+                                    <h4 className={`font-label-bold text-sm md:text-base transition-colors ${isLocked ? 'text-on-surface-variant' : 'text-on-surface group-hover:text-primary'}`}>{syl.title}</h4>
                                     <div className="flex items-center gap-3 mt-0.5">
                                       <span className="text-[10px] text-on-surface-variant flex items-center gap-1 font-bold uppercase">
                                         <Icon name="schedule" className="w-3 h-3" /> {isAssignment ? 'Penugasan' : 'Materi'}
                                       </span>
                                       {isAssignment && (
                                         <span className="text-[9px] bg-secondary/10 text-secondary px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter border border-secondary/20">Wajib Selesai</span>
+                                      )}
+                                      {isLocked && (
+                                        <span className="text-[9px] bg-on-surface/10 text-on-surface-variant px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter border border-on-surface/20">Terkunci</span>
                                       )}
                                     </div>
                                   </div>
@@ -602,11 +698,18 @@ const CourseDetail = () => {
                                         Selesai
                                       </span>
                                     </div>
+                                  ) : isLocked ? (
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); setPreviewItem(syl); }}
+                                      className="px-4 py-1.5 text-xs font-black rounded-lg border-2 border-on-background/40 bg-surface text-on-surface-variant shadow-[2px_2px_0px_0px_rgba(0,0,0,0.15)] transition-all flex items-center gap-1.5"
+                                    >
+                                      <Icon name="visibility" className="w-3.5 h-3.5" /> Preview
+                                    </button>
                                   ) : (
                                     <button 
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        navigate(`/courses/${id}/learn/${syl.id}`);
+                                        navigate(`/courses/${id}/learn`);
                                       }}
                                       className={`px-4 py-1.5 text-xs font-black rounded-lg border-2 border-on-background shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-[-1px] group-hover:translate-y-[-1px] group-hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all ${isAssignment ? 'bg-secondary text-white' : 'bg-primary text-white'}`}
                                     >
@@ -799,9 +902,18 @@ const CourseDetail = () => {
                         }) : 'Baru saja'}
                       </div>
                     </div>
-                    <div className="text-center">
+                    <div className="text-center flex flex-col items-center">
+                      {course.profiles?.signature_url && (
+                        <img 
+                          src={course.profiles.signature_url} 
+                          alt="Tanda Tangan Pengajar" 
+                          className="h-8 md:h-12 mx-auto object-contain -mb-2" 
+                        />
+                      )}
                       <div className="w-16 md:w-24 h-0.5 bg-on-surface mb-1"></div>
-                      <div className="text-[8px] md:text-[10px] font-black uppercase text-on-surface">Harin AI System</div>
+                      <div className="text-[8px] md:text-[10px] font-black uppercase text-on-surface">
+                        {course.profiles?.full_name || course.instructor || "Harin AI System"}
+                      </div>
                       <div className="text-[6px] md:text-[8px] font-bold text-on-surface-variant">Verifikasi Resmi</div>
                     </div>
                   </div>
@@ -840,6 +952,74 @@ const CourseDetail = () => {
                   Cetak / Simpan PDF
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Preview Modal for Locked Syllabus Items */}
+      {previewItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewItem(null)}>
+          <div 
+            className="bg-white rounded-[32px] border-4 border-on-surface shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full animate-in zoom-in-95 duration-300"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Lock badge */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 rounded-xl bg-on-surface/10 border-2 border-on-surface flex items-center justify-center flex-shrink-0">
+                <Icon name="lock" className="w-6 h-6 text-on-surface-variant" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-on-surface-variant uppercase tracking-wider">Materi Terkunci</p>
+                <h2 className="font-black text-lg text-on-surface leading-tight">{previewItem.title}</h2>
+              </div>
+            </div>
+
+            {/* Type badge */}
+            <div className="mb-4">
+              {(() => {
+                const isAsgn = previewItem.type === 'assignment' || previewItem.type === 'final_project' || !!previewItem.assignment_text;
+                return (
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border-2 ${isAsgn ? 'bg-secondary/10 text-secondary border-secondary/30' : 'bg-primary/10 text-primary border-primary/30'}`}>
+                    {isAsgn ? '📋 Penugasan' : '📖 Materi'}
+                  </span>
+                );
+              })()}
+            </div>
+
+            {/* Preview content - truncated */}
+            <div className="bg-surface-container-low rounded-2xl border-2 border-on-surface/10 p-4 mb-6">
+              <p className="text-xs font-black text-on-surface-variant uppercase tracking-wider mb-2">Preview Singkat</p>
+              <p className="text-sm text-on-surface-variant leading-relaxed line-clamp-4">
+                {previewItem.content 
+                  ? previewItem.content.replace(/[#*_`]/g, '').substring(0, 200) + (previewItem.content.length > 200 ? '...' : '')
+                  : previewItem.assignment_text 
+                    ? previewItem.assignment_text.substring(0, 200) + (previewItem.assignment_text.length > 200 ? '...' : '')
+                    : 'Selesaikan materi sebelumnya untuk membuka konten ini.'}
+              </p>
+            </div>
+
+            {/* Lock explanation */}
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-6 flex gap-3 items-start">
+              <span className="text-xl flex-shrink-0">🔒</span>
+              <div>
+                <p className="text-xs font-black text-amber-700 mb-1">Selesaikan Materi Sebelumnya</p>
+                <p className="text-xs text-amber-600">Kamu harus menyelesaikan semua materi sebelum ini untuk dapat mengakses konten ini secara penuh.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setPreviewItem(null)} 
+                className="flex-1 py-3 rounded-2xl border-2 border-on-surface font-black text-sm hover:bg-surface-container transition-all"
+              >
+                Tutup
+              </button>
+              <button 
+                onClick={() => { setPreviewItem(null); navigate(`/courses/${id}/learn`); }}
+                className="flex-1 py-3 rounded-2xl bg-primary text-on-primary border-2 border-on-surface font-black text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all"
+              >
+                Lanjut Belajar →
+              </button>
             </div>
           </div>
         </div>

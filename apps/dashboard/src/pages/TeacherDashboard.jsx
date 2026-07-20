@@ -5,6 +5,7 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
+import { showToast, showConfirm } from '../lib/toast';
 import { HaiIcon, WaveIcon } from '../components/Icons';
 
 const TeacherDashboard = () => {
@@ -66,9 +67,36 @@ const TeacherDashboard = () => {
       const teacherCourses = Object.values(allCoursesMap);
 
       if (teacherCourses) {
-        setCourses(teacherCourses);
-        // Fetch real ratings
         const cIds = teacherCourses.map(c => c.id);
+        
+        // Fetch enrollment counts
+        let enrollmentsList = [];
+        if (cIds.length > 0) {
+          const { data: eData } = await supabase
+            .from('enrollments').select('course_id').in('course_id', cIds);
+          enrollmentsList = eData || [];
+        }
+
+        // Build enrollment count map
+        const countMap = {};
+        enrollmentsList.forEach(e => {
+          countMap[e.course_id] = (countMap[e.course_id] || 0) + 1;
+        });
+
+        // Auto-lock courses that have students but are not already locked
+        const coursesToLock = teacherCourses.filter(c =>
+          countMap[c.id] > 0 && c.status !== 'locked' && !c.isCollaboration
+        );
+        if (coursesToLock.length > 0) {
+          await Promise.all(
+            coursesToLock.map(c =>
+              supabase.from('courses').update({ status: 'locked' }).eq('id', c.id)
+            )
+          );
+          coursesToLock.forEach(c => { c.status = 'locked'; });
+        }
+
+        // Fetch real ratings
         if (cIds.length > 0) {
           const { data: ratings } = await supabase
             .from('course_ratings').select('course_id, rating').in('course_id', cIds);
@@ -79,6 +107,8 @@ const TeacherDashboard = () => {
           });
           setRatingsMap(rMap);
         }
+
+        setCourses(teacherCourses);
       }
 
       // Fetch pending invitations
@@ -145,18 +175,18 @@ const TeacherDashboard = () => {
           .update({ status: 'accepted' })
           .eq('id', inviteId);
         if (error) throw error;
-        alert('Undangan diterima! Anda sekarang dapat ikut mengedit course ini.');
+        showToast('Undangan diterima! Anda sekarang dapat ikut mengedit course ini.');
       } else {
         const { error } = await supabase
           .from('course_collaborators')
           .delete()
           .eq('id', inviteId);
         if (error) throw error;
-        alert('Undangan berhasil ditolak.');
+        showToast('Undangan berhasil ditolak.');
       }
       setReloadTrigger(prev => prev + 1);
     } catch (err) {
-      alert('Gagal memproses undangan: ' + err.message);
+      showToast('Gagal memproses undangan: ' + err.message, 'error');
     }
   };
 
@@ -165,15 +195,15 @@ const TeacherDashboard = () => {
   };
 
   const handleDeleteCourse = async (id) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus kursus ini? Semua data terkait (syllabus, section) akan ikut terhapus.')) {
+    if (await showConfirm('Apakah Anda yakin ingin menghapus kursus ini? Semua data terkait (syllabus, section) akan ikut terhapus.')) {
       setLoading(true);
       try {
         const { error } = await supabase.from('courses').delete().eq('id', id);
         if (error) throw error;
         setCourses(courses.filter(c => c.id !== id));
-        alert('Kursus berhasil dihapus.');
+        showToast('Kursus berhasil dihapus.');
       } catch (err) {
-        alert('Gagal menghapus kursus: ' + err.message);
+        showToast('Gagal menghapus kursus: ' + err.message, 'error');
       } finally {
         setLoading(false);
       }
@@ -181,13 +211,13 @@ const TeacherDashboard = () => {
   };
 
   return (
-    <div className="bg-surface font-sans text-on-surface min-h-screen antialiased flex">
+    <div className="bg-surface font-sans text-on-surface min-h-screen antialiased flex overflow-x-hidden">
       <TeacherSidebar user={user} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-[280px]">
         {/* Top Header */}
-        <header className="flex justify-between items-center px-8 lg:px-12 h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10 shrink-0">
+        <header className="flex justify-between items-center px-4 md:px-8 lg:px-12 h-14 md:h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10 shrink-0">
           <div className="flex items-center gap-4">
             <h2 className="font-headline-md text-headline-md font-extrabold text-on-surface">Dashboard</h2>
           </div>
@@ -249,7 +279,7 @@ const TeacherDashboard = () => {
           <div className="bg-primary-container p-8 rounded-[32px] border-4 border-on-surface shadow-[8px_8px_0px_0px_#1c1b1b]">
             <div className="flex justify-between items-start mb-6">
               <div className="w-14 h-14 bg-white rounded-full border-2 border-on-surface flex items-center justify-center">
-                <Icon name="group" className="w-8 h-8 text-primary" />
+                <Icon name="school" className="w-8 h-8 text-primary" />
               </div>
               <span className="text-xs font-black px-4 py-1 bg-white border-2 border-on-surface rounded-full uppercase">Live</span>
             </div>
@@ -316,6 +346,12 @@ const TeacherDashboard = () => {
                             <span className="px-3 py-1 bg-surface-variant border-2 border-on-surface rounded-full text-[10px] font-black uppercase tracking-wider">{course.category}</span>
                           </div>
                         </div>
+                        {course.status === 'locked' && (
+                          <div className="mb-2 p-2 bg-error/5 border border-error/30 rounded-xl flex items-center gap-2 max-w-max">
+                            <span className="material-symbols-outlined text-error text-xs">lock</span>
+                            <p className="text-[9px] text-error font-black uppercase tracking-wider">Terkunci — Sudah ada student yang enroll</p>
+                          </div>
+                        )}
                         <p className="text-on-surface-variant font-bold text-sm">
                           {formatPrice(course.price)} •{' '}
                           {ratingsMap[course.id]?.length > 0
@@ -324,13 +360,23 @@ const TeacherDashboard = () => {
                         </p>
                       </div>
                       <div className="flex gap-3 mt-4">
-                        <button 
-                          onClick={() => navigate(`/teacher/courses/edit/${course.id}`)}
-                          className="px-6 py-2 bg-primary-container text-on-primary-container font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        {!course.isCollaboration && (
+                        {course.status !== 'locked' ? (
+                          <button 
+                            onClick={() => navigate(`/teacher/courses/edit/${course.id}`)}
+                            className="px-6 py-2 bg-primary-container text-on-primary-container font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        ) : (
+                          <button 
+                            disabled
+                            className="px-6 py-2 bg-primary-container text-on-primary-container font-black rounded-xl border-2 border-on-surface opacity-40 cursor-not-allowed flex items-center gap-1.5"
+                            title="Course terkunci karena sudah ada student yang enroll"
+                          >
+                            <span className="material-symbols-outlined text-sm font-black">lock</span> Terkunci
+                          </button>
+                        )}
+                        {!course.isCollaboration && course.status !== 'locked' && (
                           <button 
                             onClick={() => handleDeleteCourse(course.id)}
                             className="px-6 py-2 bg-white text-error font-black rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#1c1b1b] hover:translate-y-0.5 hover:shadow-none transition-all cursor-pointer"

@@ -149,21 +149,21 @@ const Cart = () => {
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-surface flex justify-between items-center w-full px-margin-mobile md:px-margin-desktop h-20 sticky top-0 z-40 border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
-          <div className="flex items-center gap-4">
-            <h1 className="font-headline-md text-headline-md font-extrabold">Keranjang Belanja</h1>
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <header className="bg-surface flex justify-between items-center w-full px-4 md:px-margin-desktop h-14 md:h-20 sticky top-0 z-40 border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-2 md:gap-4">
+            <h1 className="font-headline-md text-headline-md font-extrabold">Keranjang</h1>
             <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full border-2 border-on-surface font-label-bold text-sm">
               {cartItems.length} Item
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <NotificationDropdown />
             <ProfileDropdown />
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-margin-mobile md:p-margin-desktop">
+        <main className="flex-1 overflow-y-auto p-4 md:p-margin-desktop pb-24 md:pb-8">
           {cartItems.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pb-20">
               <div className="lg:col-span-8 space-y-6">

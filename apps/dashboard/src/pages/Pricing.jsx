@@ -200,7 +200,7 @@ const Pricing = () => {
         </main>
 
         {/* Footer Component */}
-        <footer className="bg-surface-container-lowest border-t-2 border-on-surface pt-16 pb-8">
+        <footer className="bg-surface-container-lowest border-t-2 border-on-surface pt-16 pb-28 md:pb-8">
           <div className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop grid grid-cols-1 md:grid-cols-4 gap-gutter mb-12">
             <div className="col-span-1 md:col-span-1">
               <div className="flex items-center gap-2 mb-6">

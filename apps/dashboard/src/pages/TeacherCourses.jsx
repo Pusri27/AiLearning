@@ -164,6 +164,20 @@ const TeacherCourses = () => {
   const handlePublishCourse = async (courseId) => {
     setPublishingId(courseId);
     try {
+      // Validate that course has a final project
+      const { data: fpItems, error: fpErr } = await supabase
+        .from('course_syllabus')
+        .select('id')
+        .eq('course_id', courseId)
+        .eq('type', 'final_project')
+        .limit(1);
+
+      if (fpErr) throw fpErr;
+      if (!fpItems || fpItems.length === 0) {
+        showToast('Kursus tidak dapat dipublikasikan karena belum memiliki Final Project (Tugas Akhir).', 'error');
+        return;
+      }
+
       const { error } = await supabase.from('courses').update({ status: 'published' }).eq('id', courseId);
       if (error) throw error;
       setCourses(prev => prev.map(c => c.id === courseId ? { ...c, status: 'published' } : c));
@@ -222,7 +236,7 @@ const TeacherCourses = () => {
               <button
                 key={tab}
                 onClick={() => setStatusFilter(tab)}
-                className={`px-5 py-2.5 rounded-2xl border-2 font-black text-sm uppercase tracking-wide transition-all ${
+                className={`px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl sm:rounded-2xl border-2 font-black text-xs sm:text-sm uppercase tracking-wide transition-all ${
                   isActive
                     ? 'bg-on-surface text-white border-on-surface shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]'
                     : 'bg-white border-outline-variant text-on-surface-variant hover:bg-surface-container-low'
@@ -308,11 +322,11 @@ const TeacherCourses = () => {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex gap-2 pt-5 border-t border-surface-variant flex-wrap">
+                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 pt-5 border-t border-surface-variant w-full">
                         {/* Preview Button — always available */}
                         <button
                           onClick={() => navigate(`/teacher/courses/preview/${course.id}?from=list`)}
-                          className="py-3 px-4 rounded-2xl border-2 border-primary-container bg-primary-container text-on-primary-container font-bold hover:opacity-80 transition-all flex justify-center items-center gap-1 text-sm"
+                          className="col-span-1 py-3 px-3 rounded-2xl border-2 border-primary-container bg-primary-container text-on-primary-container font-bold hover:opacity-80 transition-all flex justify-center items-center gap-1 text-xs md:text-sm"
                           title="Preview tampilan student"
                         >
                           <span className="material-symbols-outlined text-lg">visibility</span>
@@ -323,14 +337,14 @@ const TeacherCourses = () => {
                         {!isLocked ? (
                           <button
                             onClick={() => navigate(`/teacher/courses/edit/${course.id}`)}
-                            className="flex-1 py-3 rounded-2xl border-2 border-outline-variant font-bold hover:bg-surface-container-low transition-all flex justify-center items-center gap-2 text-sm"
+                            className="col-span-1 py-3 rounded-2xl border-2 border-outline-variant font-bold hover:bg-surface-container-low transition-all flex justify-center items-center gap-2 text-xs md:text-sm"
                           >
                             <span className="material-symbols-outlined text-lg">edit</span> Edit
                           </button>
                         ) : (
                           <button
                             disabled
-                            className="flex-1 py-3 rounded-2xl border-2 border-outline-variant font-bold flex justify-center items-center gap-2 text-sm opacity-40 cursor-not-allowed"
+                            className="col-span-1 py-3 rounded-2xl border-2 border-outline-variant font-bold flex justify-center items-center gap-2 text-xs md:text-sm opacity-40 cursor-not-allowed"
                             title="Course terkunci karena sudah ada student yang enroll"
                           >
                             <span className="material-symbols-outlined text-lg">lock</span> Terkunci
@@ -345,7 +359,7 @@ const TeacherCourses = () => {
                               setShowConfirmPublish(true);
                             }}
                             disabled={publishingId === course.id}
-                            className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white border-2 border-on-surface font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all flex justify-center items-center gap-2 text-sm disabled:opacity-50"
+                            className="col-span-2 sm:flex-1 py-3 rounded-2xl bg-emerald-600 text-white border-2 border-on-surface font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-none transition-all flex justify-center items-center gap-2 text-xs md:text-sm disabled:opacity-50"
                           >
                             <span className="material-symbols-outlined text-lg">public</span>
                             {publishingId === course.id ? 'Proses...' : 'Publish'}
@@ -356,7 +370,7 @@ const TeacherCourses = () => {
                         {courseRatings.length > 0 && (
                           <button
                             onClick={() => setExpandedFeedback(isExpanded ? null : course.id)}
-                            className="py-3 px-4 rounded-2xl border-2 border-outline-variant font-bold hover:bg-surface-container-low transition-all flex justify-center items-center gap-2 text-sm"
+                            className="col-span-1 py-3 px-3 rounded-2xl border-2 border-outline-variant font-bold hover:bg-surface-container-low transition-all flex justify-center items-center gap-2 text-xs md:text-sm"
                           >
                             <span className="material-symbols-outlined text-lg">reviews</span>
                             {isExpanded ? '▲' : '▼'}
@@ -367,7 +381,7 @@ const TeacherCourses = () => {
                         {!course.isCollaboration && !isLocked && (
                           <button
                             onClick={() => handleDeleteCourse(course.id)}
-                            className={`py-3 px-4 rounded-2xl border-2 font-bold transition-all flex justify-center items-center gap-1 text-sm ${confirmDeleteId === course.id ? 'bg-error text-white border-error' : 'border-error-container text-error hover:bg-error-container'}`}
+                            className={`col-span-1 py-3 px-3 rounded-2xl border-2 font-bold transition-all flex justify-center items-center gap-1 text-xs md:text-sm ${confirmDeleteId === course.id ? 'bg-error text-white border-error' : 'border-error-container text-error hover:bg-error-container'}`}
                           >
                             <span className="material-symbols-outlined text-lg">delete</span>
                           </button>

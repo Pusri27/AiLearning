@@ -476,12 +476,12 @@ const StudySpace = () => {
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col overflow-y-auto">
+      <main className="flex-1 flex flex-col overflow-y-auto min-w-0">
         {/* Header */}
-        <header className="sticky top-0 z-40 flex justify-between items-center px-6 lg:px-margin-desktop py-4 bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
+        <header className="sticky top-0 z-40 flex justify-between items-center px-4 md:px-6 lg:px-margin-desktop py-3 md:py-4 bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
           <div>
             <h1 className="font-headline-md font-black text-on-surface">Study Space</h1>
-            <p className="text-sm text-on-surface-variant">Focus tools & AI planner for deep learning sessions.</p>
+            <p className="text-sm text-on-surface-variant hidden md:block">Focus tools & AI planner for deep learning sessions.</p>
           </div>
           <div className="flex items-center gap-3">
             <NotificationDropdown />
@@ -489,7 +489,7 @@ const StudySpace = () => {
           </div>
         </header>
 
-        <div className="p-6 lg:p-margin-desktop flex flex-col gap-8 pb-16">
+        <div className="p-4 md:p-6 lg:p-margin-desktop flex flex-col gap-6 md:gap-8 pb-24 md:pb-16">
 
           {/* ── Top Grid ────────────────────────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

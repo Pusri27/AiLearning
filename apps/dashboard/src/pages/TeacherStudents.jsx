@@ -12,6 +12,32 @@ const getProgressStyle = (p) => ({
   transition: 'width 0.7s ease',
 });
 
+const getViewerUrl = (url) => {
+  if (!url) return '';
+  const cleanUrl = url.trim();
+  let extension = '';
+  try {
+    const pathname = new URL(cleanUrl).pathname;
+    const parts = pathname.split('.');
+    if (parts.length > 1) {
+      extension = parts.pop().toLowerCase();
+    }
+  } catch (e) {
+    const parts = cleanUrl.split('?')[0].split('.');
+    if (parts.length > 1) {
+      extension = parts.pop().toLowerCase();
+    }
+  }
+  const officeExtensions = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
+  if (officeExtensions.includes(extension)) {
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(cleanUrl)}`;
+  }
+  if (extension === 'pdf') {
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(cleanUrl)}`;
+  }
+  return cleanUrl;
+};
+
 const TeacherStudents = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -29,8 +55,6 @@ const TeacherStudents = () => {
   const [teacherUserId, setTeacherUserId] = useState(null);
   // Certificate upload modal
   const [certModal, setCertModal] = useState(null); // {courseId, courseName}
-  const [certFile, setCertFile] = useState(null);
-  const [certPreview, setCertPreview] = useState(null);
   const [uploadingCert, setUploadingCert] = useState(false);
   const [codeModal, setCodeModal] = useState(null); // {title: string, code: string}
   const [codeOutput, setCodeOutput] = useState("");
@@ -72,9 +96,9 @@ const TeacherStudents = () => {
       setTeacherUserId(session.user.id);
 
       const { data: profile } = await supabase
-        .from('profiles').select('role, full_name').eq('id', session.user.id).single();
+        .from('profiles').select('role, full_name, signature_url').eq('id', session.user.id).single();
       if (profile?.role !== 'teacher') { navigate('/'); return; }
-      setUser({ ...session.user, full_name: profile.full_name });
+      setUser({ ...session.user, full_name: profile.full_name, signature_url: profile.signature_url });
 
       // Step 1: Teacher courses
       const { data: teacherCourses } = await supabase
@@ -225,32 +249,12 @@ const TeacherStudents = () => {
 
   const openCertModal = (courseId, courseName) => {
     setCertModal({ courseId, courseName });
-    setCertFile(null);
-    setCertPreview(null);
   };
 
-  const handleCertFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setCertFile(file);
-    setCertPreview(URL.createObjectURL(file));
-  };
-
-  const handleIssueCertificate = async () => {
-    if (!certFile || !certModal) return;
+  const handleIssueSignedCertificate = async () => {
+    if (!certModal) return;
     setUploadingCert(true);
     try {
-      // Upload to storage
-      const ext = certFile.name.split('.').pop();
-      const path = `certificates/${selectedStudent.id}_${certModal.courseId}_${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('certificates')
-        .upload(path, certFile, { upsert: true });
-      if (upErr) throw upErr;
-
-      const { data: urlData } = supabase.storage.from('certificates').getPublicUrl(path);
-      const certUrl = urlData?.publicUrl;
-
       // Check if cert already exists → update, else insert
       const { data: existing } = await supabase
         .from('certificates')
@@ -261,10 +265,10 @@ const TeacherStudents = () => {
 
       let certError;
       if (existing) {
-        // Update existing certificate with new image
+        // Update existing certificate to ensure it is marked as officially issued
         const { error } = await supabase
           .from('certificates')
-          .update({ certificate_url: certUrl })
+          .update({ certificate_url: null, issued_at: new Date().toISOString() })
           .eq('id', existing.id);
         certError = error;
       } else {
@@ -274,13 +278,27 @@ const TeacherStudents = () => {
           .insert({
             user_id: selectedStudent.id,
             course_id: certModal.courseId,
-            certificate_url: certUrl,
+            certificate_url: null,
+            issued_at: new Date().toISOString()
           });
         certError = error;
       }
       if (certError) throw certError;
 
-      showToast('Sertifikat berhasil diberikan! 🎓', 'success');
+      // Send a notification to the student
+      try {
+        await supabase.from('notifications').insert({
+          user_id: selectedStudent.id,
+          title: 'Sertifikat Kelulusan Diterbitkan! 🎓',
+          content: `Selamat! Guru Anda telah menandatangani dan menerbitkan sertifikat kelulusan Anda untuk kelas "${certModal.courseName}".`,
+          type: 'course',
+          link_to: `/courses/${certModal.courseId}`
+        });
+      } catch (notifErr) {
+        console.warn('Gagal mengirim notifikasi sertifikat:', notifErr);
+      }
+
+      showToast('Sertifikat berhasil ditandatangani dan dikirim! 🎓', 'success');
       setCertModal(null);
       await openDetail(selectedStudent);
     } catch (err) {
@@ -300,52 +318,107 @@ const TeacherStudents = () => {
     <div className="bg-surface font-sans text-on-surface min-h-screen antialiased flex">
       <TeacherSidebar user={user} />
 
-      {/* ─── Certificate Upload Modal ─── */}
+      {/* ─── Certificate Template Preview Modal ─── */}
       {certModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-white rounded-[40px] border-4 border-on-surface shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-md p-8">
-            <div className="flex items-center justify-between mb-6">
+          <div className="bg-white rounded-[40px] border-4 border-on-surface shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] w-full max-w-3xl p-6 md:p-8 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-6 shrink-0">
               <div>
-                <h3 className="text-2xl font-black">Upload Sertifikat</h3>
-                <p className="text-sm text-on-surface-variant font-bold mt-1">Untuk: <span className="text-primary">{selectedStudent?.name}</span></p>
-                <p className="text-xs text-on-surface-variant font-bold">Kursus: {certModal.courseName}</p>
+                <h3 className="text-2xl font-black">Pratinjau Sertifikat Kelulusan</h3>
+                <p className="text-sm text-on-surface-variant font-bold mt-1">
+                  Harap periksa informasi sertifikat sebelum mengirimkannya ke siswa.
+                </p>
               </div>
               <button onClick={() => setCertModal(null)} className="p-2 hover:bg-surface-container rounded-xl">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            {/* Preview */}
-            {certPreview ? (
-              <div className="w-full h-48 rounded-2xl border-4 border-on-surface overflow-hidden mb-6 relative">
-                <img src={certPreview} alt="Preview" className="w-full h-full object-cover" />
-                <button
-                  onClick={() => { setCertFile(null); setCertPreview(null); }}
-                  className="absolute top-2 right-2 bg-error text-white rounded-full p-1 border-2 border-white"
-                >
-                  <span className="material-symbols-outlined text-sm">close</span>
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center w-full h-48 rounded-2xl border-4 border-dashed border-on-surface/30 bg-surface-container-low hover:bg-surface-container cursor-pointer mb-6 transition-all">
-                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleCertFileChange} />
-                <span className="material-symbols-outlined text-5xl text-on-surface-variant mb-3">cloud_upload</span>
-                <p className="font-black text-on-surface-variant">Klik untuk upload gambar sertifikat</p>
-                <p className="text-xs text-on-surface-variant mt-1 font-bold">Format: JPG, PNG, PDF</p>
-              </label>
-            )}
+            {/* Certificate Template Preview */}
+            <div className="flex-1 overflow-y-auto pr-2 mb-6">
+              <div className="w-full border-[8px] border-double border-on-background p-6 md:p-8 bg-[#fffcf5] text-center relative rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                {/* Decorative Corners */}
+                <div className="absolute top-3 left-3 w-8 h-8 border-t-4 border-l-4 border-on-background"></div>
+                <div className="absolute top-3 right-3 w-8 h-8 border-t-4 border-r-4 border-on-background"></div>
+                <div className="absolute bottom-3 left-3 w-8 h-8 border-b-4 border-l-4 border-on-background"></div>
+                <div className="absolute bottom-3 right-3 w-8 h-8 border-b-4 border-r-4 border-on-background"></div>
 
-            <div className="flex gap-3">
+                <div className="text-base md:text-lg font-black tracking-[4px] uppercase mb-2">AiLearning Academy</div>
+                <div className="text-xl md:text-2xl font-black text-on-background uppercase mb-6 border-b-4 border-on-background inline-block pb-2 tracking-wide">
+                  SERTIFIKAT KELULUSAN
+                </div>
+
+                <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">
+                  Diberikan Kepada
+                </div>
+                <div className="text-lg md:text-xl font-black text-on-background underline capitalize mb-4 font-serif italic">
+                  {selectedStudent?.name}
+                </div>
+
+                <div className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">
+                  Atas Keberhasilannya Menyelesaikan Kelas
+                </div>
+                <div className="text-sm md:text-base font-black text-primary mb-6 leading-tight">
+                  {certModal.courseName}
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end gap-6 mt-8 px-4">
+                  <div className="text-center sm:text-left">
+                    <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Tanggal Kelulusan</div>
+                    <div className="text-xs md:text-sm font-black text-on-background mt-1">
+                      {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center flex flex-col items-center">
+                    {user?.signature_url ? (
+                      <img 
+                        src={user.signature_url} 
+                        alt="Tanda Tangan" 
+                        className="h-10 md:h-14 object-contain -mb-2 bg-transparent"
+                      />
+                    ) : (
+                      <div className="h-10 md:h-14 flex items-center justify-center text-error font-bold text-[10px] max-w-[180px] border border-dashed border-error/50 p-2 rounded bg-error/5">
+                        Tanda Tangan Belum Diatur
+                      </div>
+                    )}
+                    <div className="w-24 md:w-32 h-0.5 bg-on-background mb-1"></div>
+                    <div className="text-[10px] font-black uppercase text-on-background">
+                      {user?.full_name || 'Instruktur Utama'}
+                    </div>
+                    <div className="text-[8px] font-bold text-on-surface-variant">Lead Instructor</div>
+                  </div>
+                </div>
+
+                <div className="mt-6 text-[8px] font-bold text-on-surface-variant/50 tracking-wider">
+                  ID Verifikasi: CERT-AUTO-{(selectedStudent?.id || 'STUDENT').slice(0, 8).toUpperCase()}
+                </div>
+              </div>
+
+              {!user?.signature_url && (
+                <div className="mt-4 p-4 bg-error/10 border-2 border-error text-error rounded-2xl flex items-center gap-3">
+                  <span className="material-symbols-outlined text-2xl">warning</span>
+                  <div>
+                    <p className="font-black text-sm">Tanda Tangan Digital Belum Diatur</p>
+                    <p className="text-xs font-bold mt-0.5">
+                      Silakan masuk ke halaman <strong>Pengaturan Guru</strong> untuk menggambar atau mengunggah tanda tangan Anda terlebih dahulu agar dapat menerbitkan sertifikat.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 shrink-0">
               <button
                 onClick={() => setCertModal(null)}
-                className="flex-1 py-4 rounded-2xl border-2 border-on-surface font-black hover:bg-surface-container transition-all"
+                className="flex-1 py-3 rounded-2xl border-2 border-on-surface font-black hover:bg-surface-container transition-all"
               >
                 Batal
               </button>
               <button
-                onClick={handleIssueCertificate}
-                disabled={!certFile || uploadingCert}
-                className="flex-1 py-4 rounded-2xl bg-primary text-on-primary border-2 border-on-surface font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                onClick={handleIssueSignedCertificate}
+                disabled={!user?.signature_url || uploadingCert}
+                className="flex-1 py-3 rounded-2xl bg-primary text-on-primary border-2 border-on-surface font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {uploadingCert ? (
                   <><span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Mengirim...</>
@@ -427,7 +500,14 @@ const TeacherStudents = () => {
                     const completedCount = courseSyls.filter(s => detailData.completedSylIds.includes(s.id)).length;
                     const isComplete = courseSyls.length > 0 && completedCount === courseSyls.length;
                     const hasCert = detailData.certificates.some(c => String(c.course_id) === String(course.id));
-                    const courseSubs = detailData.submissions.filter(s => String(s.course_id) === String(course.id));
+                    // Deduplicate: keep only the latest submission per syllabus_id
+                    const rawCourseSubs = detailData.submissions.filter(s => String(s.course_id) === String(course.id));
+                    const seenSylIds = new Set();
+                    const courseSubs = rawCourseSubs.filter(s => {
+                      if (seenSylIds.has(s.syllabus_id)) return false;
+                      seenSylIds.add(s.syllabus_id);
+                      return true;
+                    });
 
                     return (
                       <div key={course.id} className="border-2 border-on-surface rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -446,7 +526,7 @@ const TeacherStudents = () => {
                               onClick={() => openCertModal(course.id, course.title)}
                               className="px-4 py-2 bg-primary text-on-primary border-2 border-on-surface rounded-xl font-black text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all"
                             >
-                              🎓 Berikan Sertifikat
+                              ✍️ Tandatangani Sertifikat
                             </button>
                           ) : (
                             <span className="px-4 py-2 bg-surface-variant text-on-surface-variant rounded-xl font-bold text-xs">
@@ -474,7 +554,7 @@ const TeacherStudents = () => {
                                 </div>
                                 {submission && (
                                   submission.file_url ? (
-                                    <a href={submission.file_url} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-primary underline flex items-center gap-1 flex-shrink-0">
+                                    <a href={getViewerUrl(submission.file_url)} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-primary underline flex items-center gap-1 flex-shrink-0">
                                       <span className="material-symbols-outlined text-sm">attach_file</span>
                                       Lihat Tugas
                                     </a>

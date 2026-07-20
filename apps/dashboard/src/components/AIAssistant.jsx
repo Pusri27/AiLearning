@@ -194,10 +194,12 @@ const AIAssistant = ({ userRole = 'student', userName = 'User' }) => {
   };
 
   return (
-    <div className="fixed bottom-10 right-10 z-[100] flex flex-col items-end gap-4">
+    <div className={`fixed right-4 md:right-10 z-[100] flex flex-col items-end gap-4 ${
+      userRole === 'teacher' ? 'bottom-24 lg:bottom-10' : 'bottom-24 md:bottom-10'
+    }`}>
       {/* Chat Card */}
       {isOpen && (
-        <div className="w-[350px] md:w-[400px] bg-white border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300 rounded-[32px]">
+        <div className="w-[calc(100vw-32px)] sm:w-[380px] md:w-[400px] bg-white border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300 rounded-[32px]">
           <div className="bg-primary p-5 border-b-4 border-on-surface flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white rounded-xl border-2 border-on-surface shadow-[2px_2px_0px_0px_#000]">

@@ -10,7 +10,7 @@ const Help = () => {
     <div className="bg-background text-on-background font-body-md flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex-1 overflow-y-auto">
-        <main className="max-w-container-max mx-auto px-margin-mobile lg:px-margin-desktop py-12">
+        <main className="max-w-container-max mx-auto px-4 md:px-margin-mobile lg:px-margin-desktop py-8 md:py-12 pb-24 md:pb-12">
         {/* Hero Search Section */}
         <section className="mb-16">
           <div className="brutal-border rounded-xl p-8 md:p-16 bg-secondary-container flex flex-col items-center text-center relative overflow-hidden soft-brutal-shadow">
@@ -126,7 +126,7 @@ const Help = () => {
         </section>
       </main>
 
-      <footer className="mt-auto border-t-2 border-on-surface p-margin-desktop bg-surface-container-low">
+      <footer className="mt-auto border-t-2 border-on-surface p-margin-desktop pb-24 md:pb-margin-desktop bg-surface-container-low">
         <div className="max-w-container-max mx-auto grid grid-cols-1 md:grid-cols-3 gap-gutter">
           <div>
             <h4 className="font-headline-md text-headline-md mb-4 text-primary">Harin</h4>

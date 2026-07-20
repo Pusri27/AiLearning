@@ -6,6 +6,7 @@ import NotificationDropdown from '../components/NotificationDropdown';
 import ProfileDropdown from '../components/ProfileDropdown';
 import Icon from '../components/Icon';
 import { useUserProfile } from '../context/UserProfileContext';
+import { showConfirm } from '../lib/toast';
 
 // ── Friendly error mapper ────────────────────────────────────────
 const friendlyError = (err) => {
@@ -258,6 +259,17 @@ const PayoutMethodsManager = ({ showToast }) => {
   );
 };
 
+// ── Base64 to Blob Helper ────────────────────────────────────────
+const base64ToBlob = (base64, mimeType = 'image/png') => {
+  const byteString = atob(base64.split(',')[1]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeType });
+};
+
 // ── Main Page ──────────────────────────────────────────────────
 const TeacherSettings = () => {
   const navigate   = useNavigate();
@@ -282,6 +294,12 @@ const TeacherSettings = () => {
   const avatarInputRef = useRef(null);
   const toastTimer     = useRef(null);
 
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureUrl, setSignatureUrl] = useState('');
+  const [savingSig, setSavingSig] = useState(false);
+  const sigFileInputRef = useRef(null);
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     clearTimeout(toastTimer.current);
@@ -303,7 +321,135 @@ const TeacherSettings = () => {
   useEffect(() => {
     setFullName(profile.fullName || '');
     setAvatarUrl(profile.avatarUrl || '');
-  }, [profile.fullName, profile.avatarUrl]);
+    setSignatureUrl(profile.signature_url || '');
+  }, [profile.fullName, profile.avatarUrl, profile.signature_url]);
+
+  const startDrawing = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000000';
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const handleSaveDrawnSignature = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !user) return;
+    
+    setSavingSig(true);
+    try {
+      const dataUrl = canvas.toDataURL('image/png');
+      const blob = base64ToBlob(dataUrl, 'image/png');
+      
+      const filePath = `${user.id}/signature_${Date.now()}.png`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, blob, { contentType: 'image/png', upsert: true });
+        
+      if (uploadError) throw uploadError;
+      
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = urlData?.publicUrl;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ signature_url: publicUrl })
+        .eq('id', user.id);
+        
+      if (error) throw error;
+      
+      setSignatureUrl(publicUrl);
+      updateProfile({ signature_url: publicUrl });
+      showToast('Tanda tangan berhasil disimpan! ✓');
+      clearCanvas();
+    } catch (err) {
+      console.error(err);
+      showToast('Gagal menyimpan tanda tangan: ' + err.message, 'error');
+    } finally {
+      setSavingSig(false);
+    }
+  };
+
+  const handleSignatureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      showToast('Format file tidak didukung. Gunakan JPG, PNG, atau WebP.', 'error');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Ukuran file terlalu besar. Maksimal 2 MB.', 'error');
+      return;
+    }
+    
+    setSavingSig(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const filePath = `${user.id}/signature_${Date.now()}.${ext}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+        
+      if (uploadError) throw uploadError;
+      
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const publicUrl = urlData?.publicUrl;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ signature_url: publicUrl })
+        .eq('id', user.id);
+        
+      if (error) throw error;
+      
+      setSignatureUrl(publicUrl);
+      updateProfile({ signature_url: publicUrl });
+      showToast('Tanda tangan berhasil diupload! ✓');
+    } catch (err) {
+      console.error(err);
+      showToast('Gagal menyimpan tanda tangan: ' + err.message, 'error');
+    } finally {
+      setSavingSig(false);
+    }
+  };
 
   const initials = fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
@@ -388,7 +534,7 @@ const TeacherSettings = () => {
 
       <main className="flex-1 flex flex-col h-full overflow-y-auto lg:ml-[280px]">
         {/* Top Header */}
-        <header className="flex justify-between items-center px-8 lg:px-12 h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
+        <header className="flex justify-between items-center px-4 md:px-8 lg:px-12 h-14 md:h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <h2 className="font-headline-md text-headline-md font-extrabold text-on-surface">Settings</h2>
           </div>
@@ -400,7 +546,7 @@ const TeacherSettings = () => {
           </div>
         </header>
 
-        <div className="p-8 lg:p-12 space-y-12 max-w-5xl mx-auto w-full">
+        <div className="p-4 md:p-8 lg:p-12 space-y-12 max-w-5xl mx-auto w-full pb-24 md:pb-16">
 
           {/* ── Account Section ───────────────────────────────── */}
           <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -512,6 +658,119 @@ const TeacherSettings = () => {
                   </button>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <hr className="border-t-2 border-on-surface" />
+
+          {/* ── Teacher Signature Section ────────────────────── */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="md:col-span-1">
+              <h3 className="font-headline-lg text-headline-lg text-on-surface">Tanda Tangan</h3>
+              <p className="font-body-md text-body-md text-on-surface-variant mt-2">
+                Gambarkan atau unggah tanda tangan Anda untuk penandatanganan sertifikat kelulusan siswa secara otomatis.
+              </p>
+            </div>
+            <div className="md:col-span-2 space-y-4">
+              <div className="bg-surface-container-lowest border-2 border-on-surface p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                <div>
+                  <h4 className="font-label-bold text-xs uppercase text-on-surface-variant mb-2">Tanda Tangan Saat Ini</h4>
+                  {signatureUrl ? (
+                    <div className="w-full max-w-[200px] h-24 border-2 border-on-surface rounded-xl bg-white p-2 flex items-center justify-center relative shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <img src={signatureUrl} alt="Signature" className="max-w-full max-h-full object-contain" />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (await showConfirm('Hapus tanda tangan saat ini?')) {
+                            const { error } = await supabase
+                              .from('profiles')
+                              .update({ signature_url: null })
+                              .eq('id', user.id);
+                            if (!error) {
+                              setSignatureUrl('');
+                              updateProfile({ signature_url: '' });
+                              showToast('Tanda tangan berhasil dihapus.');
+                            } else {
+                              showToast('Gagal menghapus tanda tangan.', 'error');
+                            }
+                          }
+                        }}
+                        className="absolute -top-2 -right-2 bg-error text-white border-2 border-on-surface rounded-full p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Icon name="close" className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full max-w-[200px] h-24 border-2 border-dashed border-on-surface-variant/30 rounded-xl flex items-center justify-center text-xs text-on-surface-variant font-bold italic bg-surface-container/20">
+                      Belum ada tanda tangan
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Drawing Pad */}
+                  <div className="space-y-3">
+                    <h5 className="font-label-bold text-xs uppercase text-on-surface-variant">Gambarkan Tanda Tangan</h5>
+                    <div className="border-2 border-on-surface bg-white rounded-xl overflow-hidden relative shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <canvas
+                        ref={canvasRef}
+                        width={400}
+                        height={150}
+                        onMouseDown={startDrawing}
+                        onMouseMove={draw}
+                        onMouseUp={stopDrawing}
+                        onMouseLeave={stopDrawing}
+                        onTouchStart={startDrawing}
+                        onTouchMove={draw}
+                        onTouchEnd={stopDrawing}
+                        className="w-full h-[150px] bg-white cursor-crosshair blockTouchScroll"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={clearCanvas}
+                        className="px-4 py-2 border-2 border-on-surface rounded-xl text-xs font-black bg-surface-container hover:bg-surface-container-low transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveDrawnSignature}
+                        disabled={savingSig}
+                        className="flex-1 px-4 py-2 bg-primary text-on-primary border-2 border-on-surface rounded-xl text-xs font-black hover:translate-y-0.5 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Icon name={savingSig ? 'sync' : 'draw'} className={`w-4 h-4 ${savingSig ? 'animate-spin' : ''}`} />
+                        {savingSig ? 'Menyimpan...' : 'Simpan Gambar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Upload Image */}
+                  <div className="space-y-3 flex flex-col justify-between">
+                    <div>
+                      <h5 className="font-label-bold text-xs uppercase text-on-surface-variant mb-3">Atau Upload Gambar Tanda Tangan</h5>
+                      <input
+                        ref={sigFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handleSignatureUpload}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => sigFileInputRef.current?.click()}
+                        disabled={savingSig}
+                        className="w-full py-10 border-2 border-dashed border-on-surface/30 rounded-xl bg-surface hover:bg-surface-container-low transition-all cursor-pointer flex flex-col items-center justify-center gap-2"
+                      >
+                        <Icon name="cloud_upload" className="w-8 h-8 text-on-surface-variant" />
+                        <span className="font-bold text-xs text-on-surface-variant">Klik untuk upload ttd (PNG/JPG/WebP)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 

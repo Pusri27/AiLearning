@@ -5,8 +5,24 @@ import ProfileDropdown from '../components/ProfileDropdown';
 import NotificationDropdown from '../components/NotificationDropdown';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
-
+import { showToast } from '../lib/toast';
 import { useUserProfile } from '../context/UserProfileContext';
+
+/* ─── Star Rating Component ─── */
+const StarRating = ({ value, onChange }) => (
+  <div className="flex gap-2">
+    {[1, 2, 3, 4, 5].map(star => (
+      <button
+        key={star}
+        type="button"
+        onClick={() => onChange(star)}
+        className={`text-5xl transition-transform hover:scale-125 ${star <= value ? 'text-[#FFB800]' : 'text-surface-variant'}`}
+      >
+        ★
+      </button>
+    ))}
+  </div>
+);
 
 const MyCourses = () => {
   const navigate = useNavigate();
@@ -17,6 +33,13 @@ const MyCourses = () => {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState({ total: 0, completed: 0, inProgress: 0 });
+
+  // Rating modal states
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingCourse, setRatingCourse] = useState(null);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -33,13 +56,15 @@ const MyCourses = () => {
 
         if (!error && enrollData) {
           const { data: userProgress } = await supabase.from('user_progress').select('course_id, syllabus_id').eq('user_id', session.user.id);
+          const { data: userRatings } = await supabase.from('course_ratings').select('course_id, rating, feedback').eq('user_id', session.user.id);
           const mapped = enrollData.map(e => {
             const course = Array.isArray(e.courses) ? e.courses[0] : e.courses;
-            if (!course) return null;
+            if (!course || course.status === 'draft') return null;
             const total = course.course_syllabus?.length || 0;
             const done = userProgress?.filter(p => p.course_id === course.id).length || 0;
             const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-            return { enrollmentId: e.id, progress, ...course };
+            const userRating = userRatings?.find(r => r.course_id === course.id) || null;
+            return { enrollmentId: e.id, progress, userRating, ...course };
           }).filter(Boolean);
           setCourses(mapped);
           setStats({
@@ -57,6 +82,41 @@ const MyCourses = () => {
     };
     fetchData();
   }, [navigate, isGuest]);
+
+  const handleOpenRating = (course) => {
+    setRatingCourse(course);
+    setRatingValue(0);
+    setFeedbackText('');
+    setShowRatingModal(true);
+  };
+
+  const handleSubmitRating = async () => {
+    if (ratingValue === 0 || !ratingCourse) { showToast('Pilih bintang terlebih dahulu.', 'error'); return; }
+    setSubmittingRating(true);
+    try {
+      const { error } = await supabase.from('course_ratings').upsert({
+        course_id: Number(ratingCourse.id),
+        user_id: profile.id,
+        rating: ratingValue,
+        feedback: feedbackText.trim() || null,
+      }, { onConflict: 'course_id,user_id' });
+      if (error) throw error;
+
+      // Update local state immediately
+      setCourses(prev => prev.map(c => c.id === ratingCourse.id ? {
+        ...c,
+        userRating: { rating: ratingValue, feedback: feedbackText }
+      } : c));
+
+      setShowRatingModal(false);
+      setRatingCourse(null);
+      showToast('Terima kasih atas ulasan kamu! 🌟', 'success');
+    } catch {
+      showToast('Gagal menyimpan ulasan.', 'error');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     let result = [...courses];
@@ -81,10 +141,10 @@ const MyCourses = () => {
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
       <Sidebar />
 
-      <div className="flex flex-col flex-grow overflow-hidden">
+      <div className="flex flex-col flex-grow overflow-hidden min-w-0">
         {/* TopAppBar */}
-        <header className="bg-surface flex justify-between items-center w-full px-6 md:px-margin-desktop h-16 sticky top-0 z-[50] border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
-          <h1 className="font-headline-md font-extrabold text-primary hidden md:block">Kursus Saya</h1>
+        <header className="bg-surface flex justify-between items-center w-full px-4 md:px-margin-desktop h-14 md:h-16 sticky top-0 z-[50] border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)]">
+          <h1 className="font-headline-md font-extrabold text-primary">Kursus Saya</h1>
           <div className="hidden md:flex items-center flex-grow max-w-sm mx-6">
             <div className="flex w-full bg-white border-2 border-on-surface rounded-lg items-center px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <Icon name="search" className="w-4 h-4 text-on-surface-variant shrink-0" />
@@ -96,13 +156,13 @@ const MyCourses = () => {
               />
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <NotificationDropdown />
             <ProfileDropdown />
           </div>
         </header>
 
-        <main className="flex-grow overflow-y-auto bg-surface-bright">
+        <main className="flex-grow overflow-y-auto bg-surface-bright pb-24 md:pb-0">
           <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">
             {/* Page Title + Stats */}
             <div className="mb-6">
@@ -200,7 +260,23 @@ const MyCourses = () => {
                               </p>
                             )}
                           </div>
-                          <div className="mt-3 flex justify-end">
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            {/* Rating button/display for completed courses */}
+                            {course.progress >= 100 ? (
+                              course.userRating ? (
+                                <div className="flex items-center gap-1 text-amber-500">
+                                  {'★'.repeat(course.userRating.rating)}{'☆'.repeat(5 - course.userRating.rating)}
+                                  <span className="text-xs font-black text-on-surface-variant ml-1">Rating Kamu</span>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleOpenRating(course)}
+                                  className="text-xs font-black px-3 py-1.5 bg-[#FFB800] text-on-surface border-2 border-on-surface rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all flex items-center gap-1"
+                                >
+                                  ⭐ Beri Rating
+                                </button>
+                              )
+                            ) : <div />}
                             <button
                               onClick={() => navigate(`/courses/${course.id}`)}
                               className="bg-primary text-white font-label-bold text-sm px-5 py-2 rounded-lg border-2 border-on-surface shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] hover:translate-x-[-1px] transition-all"
@@ -255,6 +331,37 @@ const MyCourses = () => {
           </div>
         </main>
       </div>
+
+      {/* Rating Modal */}
+      {showRatingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[40px] border-4 border-on-surface shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-10 max-w-lg w-full animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="text-6xl mb-4">🎓</div>
+              <h2 className="text-3xl font-black text-on-surface mb-2">Berikan Ulasanmu!</h2>
+              <p className="text-on-surface-variant font-bold">Bagaimana pengalaman belajar kamu di kursus <span className="text-primary font-black">"{ratingCourse?.title}"</span>?</p>
+            </div>
+            <div className="flex justify-center mb-6">
+              <StarRating value={ratingValue} onChange={setRatingValue} />
+            </div>
+            {ratingValue > 0 && (
+              <p className="text-center text-sm font-black text-on-surface-variant mb-6">
+                {['', 'Sangat Buruk 😞', 'Kurang Baik 😕', 'Cukup Baik 🙂', 'Bagus! 😊', 'Luar Biasa! 🌟'][ratingValue]}
+              </p>
+            )}
+            <textarea
+              className="w-full p-4 rounded-2xl border-2 border-on-surface font-medium resize-none focus:outline-none focus:ring-4 focus:ring-primary/20 mb-6 bg-surface-container-low"
+              rows={4} placeholder="Tulis ulasan kamu (opsional)..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)}
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setShowRatingModal(false); setRatingCourse(null); }} className="flex-1 py-4 rounded-2xl border-2 border-on-surface font-black hover:bg-surface-container transition-all">Nanti Saja</button>
+              <button onClick={handleSubmitRating} disabled={submittingRating || ratingValue === 0} className="flex-1 py-4 rounded-2xl bg-primary text-on-primary border-2 border-on-surface font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all disabled:opacity-50">
+                {submittingRating ? 'Mengirim...' : 'Kirim Ulasan ⭐'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

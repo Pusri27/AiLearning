@@ -71,6 +71,11 @@ const Checkout = () => {
           .single();
 
         if (!error && data) {
+          if (data.status === 'draft') {
+            showToast('Kursus ini masih dalam bentuk draft.', 'error');
+            navigate('/catalog');
+            return;
+          }
           setCartItems([{ cartId: null, ...data }]);
         } else {
           showToast('Gagal memuat detail kursus.', 'error');
@@ -86,7 +91,19 @@ const Checkout = () => {
           .eq('user_id', session.user.id);
 
         if (!error && data) {
-          setCartItems(data.map(item => ({ cartId: item.id, ...item.courses })));
+          const nonDraftItems = data
+            .map(item => {
+              const course = Array.isArray(item.courses) ? item.courses[0] : item.courses;
+              return { cartId: item.id, ...course };
+            })
+            .filter(item => item && item.status !== 'draft');
+          
+          if (nonDraftItems.length === 0 && data.length > 0) {
+            showToast('Kursus dalam keranjang masih dalam bentuk draft.', 'error');
+            navigate('/cart');
+            return;
+          }
+          setCartItems(nonDraftItems);
         }
       }
       setLoading(false);

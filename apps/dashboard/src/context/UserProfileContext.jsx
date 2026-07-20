@@ -13,6 +13,7 @@ export const UserProfileProvider = ({ children }) => {
     role: 'student',
     friend_code: '',
     isGuest: false,
+    signature_url: '',
     language: localStorage.getItem('harin_content_language') || 'id',
   });
 
@@ -20,7 +21,7 @@ export const UserProfileProvider = ({ children }) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, username, avatar_url, role, friend_code')
+        .select('id, full_name, username, avatar_url, role, friend_code, signature_url')
         .eq('id', userId)
         .maybeSingle();
 
@@ -45,6 +46,7 @@ export const UserProfileProvider = ({ children }) => {
           friend_code: data.friend_code || '',
           email:     email           || '',
           isGuest:   false,
+          signature_url: data.signature_url || '',
           language:  localStorage.getItem('harin_content_language') || 'id',
         });
       } else {
@@ -72,6 +74,7 @@ export const UserProfileProvider = ({ children }) => {
           friend_code: '',
           email: email || '',
           isGuest: false,
+          signature_url: '',
           language: localStorage.getItem('harin_content_language') || 'id',
         });
       }

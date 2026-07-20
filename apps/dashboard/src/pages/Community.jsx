@@ -12,6 +12,7 @@ import {
 } from '../components/Icons';
 import { supabase } from '../lib/supabaseClient';
 import { useUserProfile } from '../context/UserProfileContext';
+import { showToast, showConfirm } from '../lib/toast';
 
 // Dynamic data will be fetched from Supabase
 
@@ -56,6 +57,7 @@ const Community = () => {
   const [joinStatus, setJoinStatus] = useState(''); // '', 'loading', 'success', 'error'
   const [copiedInviteCode, setCopiedInviteCode] = useState(false);
   const [copiedFriendCode, setCopiedFriendCode] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const scrollRef = useRef(null);
 
@@ -72,6 +74,10 @@ const Community = () => {
   const voiceChannelRef = useRef(null);
   const analysersRef = useRef({}); // { [userId]: AnalyserNode }
   const audioCtxRef = useRef(null);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [activeChannel, activeDM]);
 
   // 1. Fetch Communities (Servers) that user has JOINED
   useEffect(() => {
@@ -1148,7 +1154,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
 
     } catch (err) {
       console.error("Error joining voice channel:", err);
-      alert("Failed to access microphone. Please allow microphone access to use the voice channel!");
+      showToast("Failed to access microphone. Please allow microphone access to use the voice channel!", "error");
       leaveVoiceChannel();
     }
   };
@@ -1255,7 +1261,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
     } catch (err) {
       console.error('Error updating channel:', err);
       setJoinStatus('error');
-      alert('Failed to update channel: ' + err.message);
+      showToast('Failed to update channel: ' + err.message, 'error');
     }
   };
 
@@ -1276,7 +1282,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
       }, 1000);
     } catch (err) {
       console.error('Error deleting channel:', err);
-      alert('Failed to delete channel. Make sure you have permission.');
+      showToast('Failed to delete channel. Make sure you have permission.', 'error');
     }
   };
 
@@ -1305,7 +1311,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
     } catch (err) {
       console.error('Error updating community:', err);
       setJoinStatus('error');
-      alert('Failed to update community.');
+      showToast('Failed to update community.', 'error');
     }
   };
 
@@ -1321,7 +1327,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
       }, 1000);
     } catch (err) {
       console.error('Error deleting community:', err);
-      alert('Only the Owner can delete the community.');
+      showToast('Only the Owner can delete the community.', 'error');
       setJoinStatus('');
     }
   };
@@ -1350,7 +1356,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
       setJoinStatus(''); // Clear loading but don't show success yet
     } catch (err) {
       console.error('Error uploading icon:', err);
-      alert('Failed to upload icon. Make sure you have a storage bucket named "avatars" with public access.');
+      showToast('Failed to upload icon. Make sure you have a storage bucket named "avatars" with public access.', 'error');
       setJoinStatus('error');
     }
   };
@@ -1373,12 +1379,12 @@ Always respond in the same language as the user (typically Indonesian). Keep you
       }, 1000);
     } catch (err) {
       console.error('Error promoting member:', err);
-      alert('Failed to change member role.');
+      showToast('Failed to change member role.', 'error');
     }
   };
 
   const kickMember = async (targetId) => {
-    if (!confirm('Are you sure you want to kick this member?')) return;
+    if (!(await showConfirm('Are you sure you want to kick this member?'))) return;
     
     try {
       const { error } = await supabase
@@ -1397,7 +1403,7 @@ Always respond in the same language as the user (typically Indonesian). Keep you
       }, 1000);
     } catch (err) {
       console.error('Error kicking member:', err);
-      alert('Failed to kick member.');
+      showToast('Failed to kick member.', 'error');
     }
   };
 
@@ -1631,10 +1637,24 @@ Always respond in the same language as the user (typically Indonesian). Keep you
     <div className="bg-background text-on-surface font-body-md flex h-screen overflow-hidden">
       {profile?.role === 'teacher' ? <TeacherSidebar user={profile} /> : <Sidebar />}
 
-      <main className={`flex-1 flex overflow-hidden ${profile?.role === 'teacher' ? 'lg:ml-[280px] pb-16 lg:pb-0' : ''}`}>
+      <main className={`flex-1 flex overflow-hidden ${profile?.role === 'teacher' ? 'lg:ml-[280px] pb-16 lg:pb-0' : 'pb-16 md:pb-0'}`}>
         
-        {/* ── Discord-style Server Sidebar ──────────────────────── */}
-        <div className="w-[72px] bg-surface-container-lowest border-r-2 border-on-surface flex flex-col items-center py-4 gap-4">
+        {/* Mobile Sidebar Backdrop */}
+        {isMobileMenuOpen && (
+          <div 
+            className={`fixed inset-0 bg-black/50 z-40 ${profile?.role === 'teacher' ? 'lg:hidden' : 'md:hidden'}`}
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Combined Sidebars Drawer Wrapper */}
+        <div className={`
+          fixed inset-y-0 left-0 z-40 flex h-full transition-transform duration-300 ease-in-out
+          ${profile?.role === 'teacher' ? 'lg:relative lg:z-auto lg:translate-x-0' : 'md:relative md:z-auto md:translate-x-0'}
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}>
+          {/* ── Discord-style Server Sidebar ──────────────────────── */}
+          <div className="w-[72px] bg-surface-container-lowest border-r-2 border-on-surface flex flex-col items-center py-4 gap-4">
           <button 
             onClick={() => setView('dm')}
             className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all border-2 ${view === 'dm' ? 'bg-primary text-white border-on-surface shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-surface border-on-surface/20 hover:rounded-xl hover:bg-primary/20'}`}
@@ -1876,6 +1896,8 @@ Always respond in the same language as the user (typically Indonesian). Keep you
           </div>
         </div>
 
+        </div>
+
         {/* ── Main Chat Area ───────────────────────────────────── */}
         <div className="flex-1 flex flex-col bg-surface overflow-hidden relative">
           
@@ -1901,8 +1923,15 @@ Always respond in the same language as the user (typically Indonesian). Keep you
           ) : (
             <>
               {/* Top Bar */}
-              <header className="h-16 px-6 flex items-center justify-between border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] z-10 bg-surface">
-                <div className="flex items-center gap-3">
+              <header className="h-16 px-4 md:px-6 flex items-center justify-between border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] z-10 bg-surface">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className={`p-1.5 border-2 border-on-surface rounded-lg hover:bg-surface-container transition-all flex items-center justify-center shrink-0 ${profile?.role === 'teacher' ? 'lg:hidden' : 'md:hidden'}`}
+                    title="Open Menu"
+                  >
+                    <Icon name="menu" className="w-5 h-5" />
+                  </button>
                   {view === 'dm' ? (
                     activeDM ? (
                       <div className="relative">
@@ -2387,20 +2416,22 @@ Always respond in the same language as the user (typically Indonesian). Keep you
             className="bg-surface w-full max-w-sm rounded-3xl border-4 border-on-surface shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
-            <div className="border-b-4 border-on-surface flex">
-              <button 
-                onClick={() => setAddServerTab('join')}
-                className={`flex-1 py-4 font-black text-xs uppercase tracking-widest transition-all ${addServerTab === 'join' ? 'bg-secondary text-on-secondary' : 'bg-surface hover:bg-on-surface/5'}`}
-              >
-                Join
-              </button>
-              <button 
-                onClick={() => setAddServerTab('create')}
-                className={`flex-1 py-4 font-black text-xs uppercase tracking-widest transition-all ${addServerTab === 'create' ? 'bg-primary text-white border-l-4 border-on-surface' : 'bg-surface hover:bg-on-surface/5 border-l-4 border-on-surface'}`}
-              >
-                Create New
-              </button>
-            </div>
+            {createType !== 'channel' && (
+              <div className="border-b-4 border-on-surface flex">
+                <button 
+                  onClick={() => setAddServerTab('join')}
+                  className={`flex-1 py-4 font-black text-xs uppercase tracking-widest transition-all ${addServerTab === 'join' ? 'bg-secondary text-on-secondary' : 'bg-surface hover:bg-on-surface/5'}`}
+                >
+                  Join
+                </button>
+                <button 
+                  onClick={() => setAddServerTab('create')}
+                  className={`flex-1 py-4 font-black text-xs uppercase tracking-widest transition-all ${addServerTab === 'create' ? 'bg-primary text-white border-l-4 border-on-surface' : 'bg-surface hover:bg-on-surface/5 border-l-4 border-on-surface'}`}
+                >
+                  Create New
+                </button>
+              </div>
+            )}
 
             <div className="p-6 space-y-4">
               {addServerTab === 'join' ? (

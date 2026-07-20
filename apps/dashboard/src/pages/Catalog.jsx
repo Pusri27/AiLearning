@@ -27,7 +27,8 @@ const Catalog = () => {
       const { data: { session } } = await supabase.auth.getSession();
       const { data, error } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
       if (!error && data) {
-        setCourses(data);
+        const activeCourses = data.filter(c => c.status !== 'draft');
+        setCourses(activeCourses);
         // Fetch ratings from course_ratings
         const courseIds = data.map(c => c.id);
         if (courseIds.length > 0) {
@@ -99,9 +100,9 @@ const Catalog = () => {
     <div className="bg-background text-on-surface h-screen overflow-hidden flex">
       <Sidebar />
 
-      <main className="flex-grow flex flex-col overflow-hidden">
+      <main className="flex-grow flex flex-col overflow-hidden min-w-0">
         {/* TopAppBar */}
-        <header className="flex justify-between items-center px-6 md:px-margin-desktop h-20 w-full bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-[60] shrink-0">
+        <header className="flex justify-between items-center px-4 md:px-6 lg:px-margin-desktop h-14 md:h-20 w-full bg-surface border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-[60] shrink-0">
           <span className="font-headline-md font-extrabold text-on-surface">Katalog Kursus</span>
           <div className="flex items-center gap-4">
             <NotificationDropdown />
@@ -109,7 +110,7 @@ const Catalog = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 md:p-margin-desktop space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-margin-desktop space-y-6 md:space-y-8 pb-24 md:pb-8">
           {/* Hero Banner */}
           <section className="relative overflow-hidden border-2 border-on-surface bg-primary shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] min-h-[240px] flex items-center px-8 md:px-12 rounded-xl">
             <div className="relative z-10 max-w-2xl">

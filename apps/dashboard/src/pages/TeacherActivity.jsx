@@ -5,6 +5,32 @@ import TeacherSidebar from '../components/TeacherSidebar';
 import Icon from '../components/Icon';
 import { supabase } from '../lib/supabaseClient';
 
+const getViewerUrl = (url) => {
+  if (!url) return '';
+  const cleanUrl = url.trim();
+  let extension = '';
+  try {
+    const pathname = new URL(cleanUrl).pathname;
+    const parts = pathname.split('.');
+    if (parts.length > 1) {
+      extension = parts.pop().toLowerCase();
+    }
+  } catch (e) {
+    const parts = cleanUrl.split('?')[0].split('.');
+    if (parts.length > 1) {
+      extension = parts.pop().toLowerCase();
+    }
+  }
+  const officeExtensions = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
+  if (officeExtensions.includes(extension)) {
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(cleanUrl)}`;
+  }
+  if (extension === 'pdf') {
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(cleanUrl)}`;
+  }
+  return cleanUrl;
+};
+
 const TeacherActivity = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -191,7 +217,7 @@ const TeacherActivity = () => {
                       </span>
                     </div>
 
-                    <h4 className="text-xl text-on-surface mb-2 font-bold">
+                    <h4 className="text-base md:text-xl text-on-surface mb-2 font-bold">
                       <span className="font-black underline decoration-primary decoration-4">{activity.user}</span> {
                         activity.type === 'Enrollment' ? 'enrolled in' :
                         activity.type === 'Submission' ? 'completed' :
@@ -200,21 +226,21 @@ const TeacherActivity = () => {
                     </h4>
 
                     {activity.file && (
-                      <div className="mt-4 p-4 rounded-2xl bg-surface-container-low border-2 border-on-surface flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-surface-variant border-2 border-on-surface flex items-center justify-center">
+                      <div className="mt-4 p-4 rounded-2xl bg-surface-container-low border-2 border-on-surface flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg bg-surface-variant border-2 border-on-surface flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined font-black">description</span>
                           </div>
-                          <div>
-                            <p className="font-black text-sm">{activity.file}</p>
+                          <div className="min-w-0">
+                            <p className="font-black text-sm truncate">{activity.file}</p>
                             <p className="text-[10px] font-black text-on-surface-variant uppercase">Submitted on time</p>
                           </div>
                         </div>
                         <a 
-                          href={activity.file_url} 
+                          href={getViewerUrl(activity.file_url)} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="text-sm font-black text-secondary underline hover:text-primary transition-colors"
+                          className="text-sm font-black text-secondary underline hover:text-primary transition-colors flex-shrink-0 text-left sm:text-right"
                         >
                           Lihat Tugas
                         </a>

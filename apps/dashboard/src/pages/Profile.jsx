@@ -125,7 +125,7 @@ const Profile = () => {
       {profile.role === 'teacher' ? <TeacherSidebar /> : <Sidebar />}
       <div className={`flex-1 flex flex-col overflow-y-auto ${profile.role === 'teacher' ? 'lg:ml-[280px]' : ''}`}>
         {/* Header */}
-        <header className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
+        <header className="flex justify-between items-center px-4 md:px-margin-mobile lg:px-margin-desktop h-14 md:h-20 w-full bg-surface-container-lowest border-b-2 border-on-surface shadow-[0px_4px_0px_0px_rgba(0,0,0,1)] sticky top-0 z-10">
           <h1 className="font-headline-md text-headline-md font-extrabold text-on-surface hidden md:block">Profil Saya</h1>
           <div className="md:hidden">
             <span className="font-headline-md text-headline-md font-extrabold text-on-surface">Harin</span>
@@ -136,7 +136,7 @@ const Profile = () => {
           </div>
         </header>
 
-        <main className="p-margin-mobile md:p-margin-desktop space-y-gutter max-w-container-max mx-auto w-full pb-16">
+        <main className="p-4 md:p-margin-mobile lg:p-margin-desktop space-y-gutter max-w-container-max mx-auto w-full pb-24 md:pb-16">
 
           {/* ── Hero Card ─────────────────────────────────────── */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
@@ -338,14 +338,6 @@ const Profile = () => {
 
         </main>
       </div>
-
-      {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t-2 border-on-surface flex justify-around items-center h-16 z-50">
-        <NavLink to={profile.role === 'teacher' ? '/teacher/dashboard' : '/'}        className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="dashboard"       className="w-6 h-6" /></NavLink>
-        <NavLink to={profile.role === 'teacher' ? '/teacher/courses' : '/catalog'} className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="menu_book"       className="w-6 h-6" /></NavLink>
-        <NavLink to="/profile" className="flex flex-col items-center justify-center text-primary font-bold"><Icon name="account_circle" className="w-6 h-6" /></NavLink>
-        <NavLink to={profile.role === 'teacher' ? '/teacher/settings' : '/settings'}className="flex flex-col items-center justify-center text-on-surface-variant"><Icon name="settings"        className="w-6 h-6" /></NavLink>
-      </nav>
     </div>
   );
 };

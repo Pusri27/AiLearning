@@ -296,7 +296,7 @@ const WritePost = () => {
   return (
     <div className="bg-background text-on-background font-plus-jakarta flex h-screen overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6 md:p-margin-desktop flex flex-col xl:flex-row gap-6">
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-margin-desktop flex flex-col xl:flex-row gap-6 pb-24 md:pb-8 min-w-0">
         {/* Content Creation Area */}
         <div className="flex-1 space-y-4">
           {/* Header */}
