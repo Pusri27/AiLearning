@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎓 AiLearning (Harin Monorepo)
+# 🎓 Harin (AiLearning Platform)
 
 **Next-Generation AI-Powered Interactive E-Learning & LMS Platform**
 
@@ -11,100 +11,100 @@
 [![OpenRouter](https://img.shields.io/badge/OpenRouter-AI%20Integration-7400B8?style=for-the-badge&logo=openai)](https://openrouter.ai/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-[Fitur Utama](#-fitur-utama) • [Teknologi](#-teknologi--arsitektur) • [Struktur Proyek](#-struktur-proyek) • [Cara Instalasi](#-cara-instalasi--penggunaan) • [Panduan Deployment](#-deployment)
+[Features](#-key-features) • [Tech Stack](#-tech-stack--architecture) • [Project Structure](#-project-structure) • [Getting Started](#-getting-started) • [Deployment](#-deployment)
 
 </div>
 
 ---
 
-## 📌 Ringkasan Proyek
+## 📌 Project Overview
 
-**AiLearning (Lumina)** adalah platform Learning Management System (LMS) modern berbasis web yang mengintegrasikan **Kecerdasan Buatan (AI)** untuk menghadirkan pengalaman belajar yang personal, interaktif, dan imersif. 
+**Harin (AiLearning)** is a state-of-the-art web-based Learning Management System (LMS) that seamlessly integrates **Artificial Intelligence (AI)** to deliver personalized, interactive, and immersive educational experiences.
 
-Dikembangkan dengan arsitektur monorepo, platform ini menyediakan ekosistem lengkap baik untuk **Siswa (Learner)** dalam mempelajari materi dan tugas coding interaktif, maupun untuk **Pengajar (Instructor)** dalam mengelola kursus, menganalisis perkembangan siswa, dan menerbitkan konten edukasi.
-
----
-
-## ✨ Fitur Utama
-
-### 👨‍🎓 Mode Siswa (Learner Experience)
-- 🚀 **Interactive Course Player**: Navigasi materi fleksibel dengan dukungan video, dokumen markdown, serta **Interactive Code Editor** langsung di browser.
-- 🤖 **AI Study Space & Tutor**: Pendamping belajar AI bawaan (powered by OpenRouter) untuk menjawab pertanyaan, menjelaskan kode, dan memberikan bantuan studi 24/7.
-- 🏆 **Gamifikasi & Daily Challenge**: Sistem tantangan harian, perolehan XP, badge pencapaian (*Achievements*), dan pelacakan *Learning Streak*.
-- 💬 **Komunitas & Blog Feed**: Ruang diskusi interaktif, publikasi artikel/blog, serta berbagi pengalaman antar sesama pelajar.
-- 🛒 **Katalog & Pembelian Kursus**: Fitur keranjang (*Cart*) dan proses *Checkout* kursus yang intuitif.
-
-### 👨‍🏫 Mode Pengajar (Instructor Studio)
-- 📊 **Teacher Analytics & Dashboard**: Monitor total siswa, pendapatan, performa kursus, serta grafik aktivitas pengajaran.
-- 📝 **Advanced Course Builder**: Maker/Editor kursus komprehensif lengkap dengan manajemen modul, penyusunan silabus, dan *Rich Description Editor*.
-- 👥 **Manajemen Siswa & Aktivitas**: Pantau progres masing-masing siswa yang terdaftar pada kursus.
-
-### 🔒 Keamanan & Infrastruktur
-- 🛡️ **Supabase Authentication**: Login/Register aman dengan enkripsi password dan manajemen sesi.
-- 🔐 **Row-Level Security (RLS)**: Proteksi data tingkat baris di PostgreSQL untuk menjamin privasi data antar pengguna.
-- 📁 **Cloud File Storage**: Manajemen berkas publik/privat untuk avatar profil dan materi silabus.
+Built with a scalable monorepo architecture, Harin provides a complete ecosystem tailored for both **Learners**—who can engage with rich course materials and live in-browser coding exercises—and **Instructors**, who are equipped with tools to build courses, monitor student analytics, and publish educational content.
 
 ---
 
-## 🛠️ Teknologi & Arsitektur
+## ✨ Key Features
 
-Platform ini dibangun menggunakan teknologi *cutting-edge* untuk memastikan performa tinggi dan skala yang mudah:
+### 👨‍🎓 Learner Experience
+- 🚀 **Interactive Course Player**: Flexible module navigation featuring video lessons, Markdown documents, and an **Interactive Code Editor** directly in the browser.
+- 🤖 **AI Study Space & Tutor**: Built-in AI learning assistant (powered by OpenRouter) for instant Q&A, code explanations, concept breakdowns, and 24/7 study guidance.
+- 🏆 **Gamification & Daily Challenges**: Daily learning tasks, XP rewards, achievement badges, and **Learning Streak** tracking to boost engagement.
+- 💬 **Community & Discussion Hub**: Interactive forum, rich blog/article publishing, and social feed for peer-to-peer collaboration.
+- 🛒 **Course Catalog & Checkout**: Intuitive course discovery, shopping cart, and smooth checkout flow.
 
-| Kategori | Teknologi | Deskripsi |
+### 👨‍🏫 Instructor Studio
+- 📊 **Teacher Analytics & Dashboard**: Real-time insights into total enrollments, revenue stats, course performance, and student engagement graphs.
+- 📝 **Advanced Course Builder**: Comprehensive course creator supporting module structure, syllabus management, and rich media content editors.
+- 👥 **Student & Activity Management**: Track individual student progress across published courses.
+
+### 🔒 Security & Infrastructure
+- 🛡️ **Supabase Authentication**: Secure user login/registration with encrypted passwords and session management.
+- 🔐 **Row-Level Security (RLS)**: PostgreSQL row-level data protection ensuring strict data isolation across accounts.
+- 📁 **Cloud Storage Buckets**: Public/private file handling for user profiles and course assets.
+
+---
+
+## 🛠️ Tech Stack & Architecture
+
+Harin leverages modern technologies designed for optimal performance, developer experience, and scalability:
+
+| Category | Technology | Description |
 | :--- | :--- | :--- |
-| **Frontend** | React 19, Vite 8 | UI framework ultra-cepat dengan React Router v7 |
-| **Styling** | Tailwind CSS v4 | Utility-first CSS framework untuk tampilan responsif & modern |
-| **Backend & DB** | Supabase (PostgreSQL) | Database relasional, Realtime subscriptions, Auth & Storage |
-| **AI Integration** | OpenRouter API | Integrasi LLM untuk tutor interaktif & asisten kecerdasan buatan |
-| **Monorepo** | npm Workspaces | Pengelolaan dependensi & aplikasi terpusat |
-| **Icons & Effects** | Lucide Icons, Canvas Confetti | Ikonografi modern dan efek animasi interaktif |
+| **Frontend** | React 19, Vite 8 | Ultra-fast UI library coupled with React Router v7 |
+| **Styling** | Tailwind CSS v4 | Utility-first CSS framework for modern, responsive layouts |
+| **Backend & DB** | Supabase (PostgreSQL) | Relational database, Realtime subscriptions, Auth & Storage |
+| **AI Integration** | OpenRouter API | Multi-model LLM integration for AI tutoring & smart assistance |
+| **Monorepo** | npm Workspaces | Centralized dependency management and workspace scripts |
+| **Icons & FX** | Lucide Icons, Canvas Confetti | Modern icon set and interactive visual feedback |
 
 ---
 
-## 📁 Struktur Proyek
+## 📁 Project Structure
 
 ```
 AiLearning/
 ├── apps/
-│   └── dashboard/                  # Aplikasi Utama React + Vite
-│       ├── public/                 # Asset statis
-│       ├── scripts/                # Skrip seeder database & maintenance
-│       │   ├── seed.js             # Seeder data kursus & materi
-│       │   ├── seed_blog.js        # Seeder artikel blog
-│       │   └── keep-alive.js       # Maintenance script
+│   └── dashboard/                  # Primary React + Vite Application
+│       ├── public/                 # Static assets
+│       ├── scripts/                # Database seeders & maintenance scripts
+│       │   ├── seed.js             # Course & material seeding
+│       │   ├── seed_blog.js        # Blog article seeding
+│       │   └── keep-alive.js       # Database ping script
 │       └── src/
-│           ├── assets/             # Gambar & ikon bawaan
-│           ├── components/         # Komponen UI reusable (Navbar, Sidebar, Modal, dll)
-│           ├── context/            # Context API (Auth, Theme, App State)
-│           ├── lib/                # Konfigurasi Supabase, OpenRouter API, & FULL_SETUP.sql
-│           └── pages/              # Halaman Siswa & Pengajar (30+ Halaman)
-├── DEPLOYMENT_GUIDE.md             # Panduan deployment lengkap ke Vercel & Supabase
+│           ├── assets/             # Branding & visual assets
+│           ├── components/         # Reusable UI components (Navbar, Sidebar, Modals, etc.)
+│           ├── context/            # Global React Contexts (Auth, Theme, App State)
+│           ├── lib/                # Supabase client, OpenRouter helpers & FULL_SETUP.sql
+│           └── pages/              # Learner & Instructor views (30+ pages)
+├── DEPLOYMENT_GUIDE.md             # Step-by-step deployment guide for Vercel & Supabase
 ├── package.json                    # Root monorepo workspace configuration
-└── README.md                       # Dokumentasi resmi proyek
+└── README.md                       # Official project documentation
 ```
 
 ---
 
-## 🚀 Cara Instalasi & Penggunaan
+## 🚀 Getting Started
 
-### 📋 Prasyarat
+### 📋 Prerequisites
 - **Node.js** >= v18.0.0
 - **npm** >= v9.0.0
-- Akun **Supabase** & Akun **OpenRouter** (Opsional untuk AI features)
+- A **Supabase** account & an **OpenRouter** API key (for AI features)
 
-### 1️⃣ Clone Repositori
+### 1️⃣ Clone the Repository
 ```bash
 git clone https://github.com/Pusri27/AiLearning.git
 cd AiLearning
 ```
 
-### 2️⃣ Instal Dependensi
+### 2️⃣ Install Dependencies
 ```bash
 npm install
 ```
 
-### 3️⃣ Konfigurasi Environment Variables
-Buat berkas `.env` di folder `apps/dashboard/.env` dan isi variabel berikut:
+### 3️⃣ Environment Configuration
+Create a `.env` file in `apps/dashboard/.env` and add the following keys:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
@@ -113,38 +113,38 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 VITE_OPENROUTER_API_KEY=your-openrouter-api-key
 ```
 
-### 4️⃣ Setup Database (Supabase)
-1. Buka **SQL Editor** di Supabase Dashboard Anda.
-2. Eksekusi skrip SQL dari `apps/dashboard/src/lib/FULL_SETUP.sql`.
-3. Buat dua Storage Bucket di Supabase Storage: `avatars` (Public) dan `syllabus_files` (Public).
-4. Jalankan seeder data (opsional):
+### 4️⃣ Database Setup (Supabase)
+1. Open the **SQL Editor** in your Supabase Dashboard.
+2. Execute the entire SQL script from `apps/dashboard/src/lib/FULL_SETUP.sql`.
+3. Create two public buckets under **Storage**: `avatars` and `syllabus_files`.
+4. (Optional) Run the database seeders:
    ```bash
    cd apps/dashboard
    npm run seed
    npm run seed:blog
    ```
 
-### 5️⃣ Jalankan Aplikasi (Development Mode)
-Dari root direktori proyek, jalankan:
+### 5️⃣ Run Locally (Development Server)
+From the root directory, start the development server:
 ```bash
 npm run dev
 ```
-Aplikasi akan berjalan di `http://localhost:5173`.
+Access the application at `http://localhost:5173`.
 
 ---
 
 ## 🌐 Deployment
 
-Panduan langkah-demi-langkah lengkap untuk mendeploy aplikasi ini ke **Vercel** (Frontend) dan **Supabase** (Backend) dapat dilihat di berkas **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**.
+For complete end-to-end deployment instructions on **Vercel** (Frontend) and **Supabase** (Backend), refer to the **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** document.
 
 ---
 
-## 📜 Lisensi
+## 📜 License
 
-Proyek ini dilindungi di bawah lisensi [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
 <div align="center">
-  <sub>Dibuat dengan ❤️ oleh <b>Natade / Pusri</b></sub>
+  <sub>Built with ❤️ by <b>Natade / Pusri</b></sub>
 </div>
