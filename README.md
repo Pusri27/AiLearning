@@ -144,7 +144,3 @@ For complete end-to-end deployment instructions on **Vercel** (Frontend) and **S
 This project is licensed under the [MIT License](LICENSE).
 
 ---
-
-<div align="center">
-  <sub>Built with ❤️ by <b>Natade / Pusri</b></sub>
-</div>
