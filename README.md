@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎓 AiLearning (Lumina Monorepo)
+# 🎓 AiLearning (Harin Monorepo)
 
 **Next-Generation AI-Powered Interactive E-Learning & LMS Platform**
 
