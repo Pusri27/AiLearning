@@ -139,6 +139,15 @@ For complete end-to-end deployment instructions on **Vercel** (Frontend) and **S
 
 ---
 
+## 👥 Team & Credits
+
+| Developer | Role | Profile |
+| :--- | :--- | :---: |
+| **Pusri Ananda Handal** | Full-Stack & AI Integration Engineer | [![GitHub Pusri27](https://img.shields.io/badge/GitHub-Pusri27-181717?style=flat&logo=github)](https://github.com/Pusri27) |
+| **Kariina** | Full-Stack Developer | [![GitHub kariina38](https://img.shields.io/badge/GitHub-kariina38-181717?style=flat&logo=github)](https://github.com/kariina38) |
+
+---
+
 ## 📜 License
 
 This project is licensed under the [MIT License](LICENSE).
