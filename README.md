@@ -139,12 +139,14 @@ For complete end-to-end deployment instructions on **Vercel** (Frontend) and **S
 
 ---
 
-## 👥 Team & Credits
+## 👥 Contributors
 
-| Developer | Role | Profile |
-| :--- | :--- | :---: |
-| **Pusri Ananda Handal** | Full-Stack & AI Integration Engineer | [![GitHub Pusri27](https://img.shields.io/badge/GitHub-Pusri27-181717?style=flat&logo=github)](https://github.com/Pusri27) |
-| **Kariina** | Full-Stack Developer | [![GitHub kariina38](https://img.shields.io/badge/GitHub-kariina38-181717?style=flat&logo=github)](https://github.com/kariina38) |
+Special thanks to the core developers behind this project:
+
+| Contributor | Role & Responsibilities | GitHub Profile |
+| :---: | :--- | :---: |
+| <img src="https://github.com/Pusri27.png" width="50" style="border-radius:50%"> | **Full-Stack & AI Integration Engineer**<br><sub>Lead architecture, AI model integration, and core features.</sub> | [@Pusri27](https://github.com/Pusri27) |
+| <img src="https://github.com/kariina38.png" width="50" style="border-radius:50%"> | **Full-Stack Developer**<br><sub>Full-stack feature development and system workflows.</sub> | [@kariina38](https://github.com/kariina38) |
 
 ---
 
